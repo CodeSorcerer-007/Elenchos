@@ -1,5 +1,6 @@
 package com.example.elenchos.testing.runtime
 
+import android.util.Log
 import com.example.elenchos.domain.model.Issue
 import com.example.elenchos.domain.model.IssueCategory
 import com.example.elenchos.domain.model.IssueConfidence
@@ -7,6 +8,7 @@ import com.example.elenchos.domain.model.IssueSeverity
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 object LogcatMonitor {
 
@@ -20,11 +22,25 @@ object LogcatMonitor {
 
     fun captureRecentCrashes(targetPackage: String): List<Issue> {
         val issues = mutableListOf<Issue>()
+        var process: Process? = null
         try {
-            val process = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "time", "*:E"))
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val lines = reader.readLines()
-            process.waitFor()
+            process = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "time", "*:E"))
+
+            // Drain error stream in parallel to prevent deadlock if buffer fills
+            val errorThread = Thread {
+                try {
+                    process.errorStream.bufferedReader().use { it.readText() }
+                } catch (_: Exception) {}
+            }
+            errorThread.start()
+
+            val lines = process.inputStream.bufferedReader().use { it.readLines() }
+
+            val finished = process.waitFor(3, TimeUnit.SECONDS)
+            if (!finished) {
+                process.destroy()
+            }
+            errorThread.join(500)
 
             val crashBlocks = mutableListOf<List<String>>()
             var currentBlock = mutableListOf<String>()
@@ -98,15 +114,30 @@ object LogcatMonitor {
                     )
                 )
             }
-        } catch (_: Exception) {
-            // Logcat permissions or sandbox restrictions handled gracefully
+        } catch (e: Exception) {
+            Log.w("LogcatMonitor", "Failed to capture logcat crashes: ${e.message}")
+        } finally {
+            try {
+                process?.destroy()
+            } catch (_: Exception) {}
         }
         return issues
     }
 
     fun clearLogcat() {
+        var process: Process? = null
         try {
-            Runtime.getRuntime().exec("logcat -c")
-        } catch (_: Exception) {}
+            process = Runtime.getRuntime().exec("logcat -c")
+            val finished = process.waitFor(2, TimeUnit.SECONDS)
+            if (!finished) {
+                process.destroy()
+            }
+        } catch (e: Exception) {
+            Log.w("LogcatMonitor", "Failed to clear logcat: ${e.message}")
+        } finally {
+            try {
+                process?.destroy()
+            } catch (_: Exception) {}
+        }
     }
 }

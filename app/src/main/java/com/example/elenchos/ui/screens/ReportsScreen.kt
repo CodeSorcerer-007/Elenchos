@@ -16,9 +16,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -60,9 +61,9 @@ fun ReportsScreen(
     modifier: Modifier = Modifier
 ) {
     val session by viewModel.activeSession.collectAsState()
-    val apk by viewModel.selectedApk.collectAsState()
+    val selectedApk by viewModel.selectedApk.collectAsState()
 
-    if (session == null || apk == null) {
+    if (session == null) {
         Column(
             modifier = modifier
                 .fillMaxSize()
@@ -80,7 +81,19 @@ fun ReportsScreen(
     }
 
     val s = session!!
-    val a = apk!!
+    val a = selectedApk ?: com.example.elenchos.domain.model.APKArtifact(
+        id = s.apkArtifactId,
+        filePath = "",
+        sha256 = s.apkSha256,
+        fileSizeBytes = 0L,
+        formattedSize = "Archived",
+        appName = s.appName,
+        packageName = s.packageName,
+        versionName = s.versionName,
+        versionCode = 0,
+        minSdk = 24,
+        targetSdk = 35
+    )
     val health = s.healthScore
 
     LazyColumn(
@@ -176,9 +189,47 @@ fun ReportsScreen(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(6.dp)
                 ) {
-                    Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.List, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("View ${s.issues.size} Issues", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+
+        // 3. Share Report Bar
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { viewModel.exportAndShareReport("md") },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Share MD", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
+
+                OutlinedButton(
+                    onClick = { viewModel.exportAndShareReport("html") },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Share HTML", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
+
+                OutlinedButton(
+                    onClick = { viewModel.exportAndShareReport("json") },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Share JSON", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -202,6 +253,66 @@ fun ReportsScreen(
                     CoverageRow("Boundary Input Fields Fuzzed", "${s.coverage.inputFieldsTested}")
                     CoverageRow("Permissions Audited", "${s.coverage.permissionFlowsTested}")
                     CoverageRow("Lifecycle & State Recreations", "${s.coverage.lifecycleScenariosTested}")
+                }
+            }
+        }
+
+        // Screen Graph Topology Card
+        if (s.screenGraph.nodes.isNotEmpty()) {
+            item {
+                LabCard {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "SCREEN GRAPH TOPOLOGY",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = LabTextSecondary,
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                text = "${s.screenGraph.nodes.size} nodes • ${s.screenGraph.transitions.size} transitions",
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                color = LabPrimary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        s.screenGraph.nodes.take(5).forEach { node ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "• ${node.title}",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = LabTextPrimary
+                                )
+                                Text(
+                                    text = "${node.interactiveElementCount} interactive elements",
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = LabTextTertiary
+                                )
+                            }
+                        }
+                        if (s.screenGraph.nodes.size > 5) {
+                            Text(
+                                text = "+ ${s.screenGraph.nodes.size - 5} more screen nodes mapped",
+                                fontSize = 11.sp,
+                                color = LabTextSecondary,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
                 }
             }
         }

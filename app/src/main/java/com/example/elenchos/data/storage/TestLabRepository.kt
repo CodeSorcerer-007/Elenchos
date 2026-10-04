@@ -1,6 +1,7 @@
 package com.example.elenchos.data.storage
 
 import android.content.Context
+import android.util.Log
 import com.example.elenchos.domain.model.AIFixPackage
 import com.example.elenchos.domain.model.APKArtifact
 import com.example.elenchos.domain.model.TestSession
@@ -42,7 +43,8 @@ class TestLabRepository(private val context: Context) : ITestLabRepository {
                 ?.mapNotNull { file ->
                     try {
                         json.decodeFromString<APKArtifact>(file.readText())
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
+                        Log.w("TestLabRepository", "Failed decoding APKArtifact from ${file.name}: ${e.message}")
                         null
                     }
                 }
@@ -54,7 +56,18 @@ class TestLabRepository(private val context: Context) : ITestLabRepository {
     override suspend fun deleteApkArtifact(id: String): Unit = withContext(Dispatchers.IO) {
         mutex.withLock {
             val file = File(projectsDir, "$id.json")
-            if (file.exists()) file.delete()
+            if (file.exists()) {
+                try {
+                    val artifact = json.decodeFromString<APKArtifact>(file.readText())
+                    val apkFile = File(artifact.filePath)
+                    if (apkFile.exists()) {
+                        apkFile.delete()
+                    }
+                } catch (e: Exception) {
+                    Log.w("TestLabRepository", "Could not remove binary file for APK $id: ${e.message}")
+                }
+                file.delete()
+            }
         }
     }
 
@@ -71,7 +84,8 @@ class TestLabRepository(private val context: Context) : ITestLabRepository {
                 ?.mapNotNull { file ->
                     try {
                         json.decodeFromString<TestSession>(file.readText())
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
+                        Log.w("TestLabRepository", "Failed decoding TestSession from ${file.name}: ${e.message}")
                         null
                     }
                 }
@@ -86,7 +100,8 @@ class TestLabRepository(private val context: Context) : ITestLabRepository {
             if (file.exists()) {
                 try {
                     json.decodeFromString<TestSession>(file.readText())
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    Log.w("TestLabRepository", "Failed reading TestSession $id: ${e.message}")
                     null
                 }
             } else null
@@ -106,31 +121,33 @@ class TestLabRepository(private val context: Context) : ITestLabRepository {
             projectsDir.mkdirs()
             sessionsDir.mkdirs()
             exportsDir.mkdirs()
+            val importedApks = File(context.filesDir, "ImportedApks")
+            if (importedApks.exists()) {
+                importedApks.deleteRecursively()
+                importedApks.mkdirs()
+            }
         }
     }
 
     override suspend fun exportReport(session: TestSession, apk: APKArtifact, format: String): File = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            val cleanPkg = apk.packageName.replace('.', '_')
-            val file = when (format.lowercase()) {
-                "json", "ai_json" -> {
-                    val pkg = AIFixPackageGenerator.generatePackage(session, apk)
-                    val f = File(exportsDir, "elenchos_ai_fix_${cleanPkg}_${session.id}.json")
-                    f.writeText(AIFixPackageGenerator.exportJson(pkg))
-                    f
-                }
-                "html" -> {
-                    val f = File(exportsDir, "elenchos_report_${cleanPkg}_${session.id}.html")
-                    f.writeText(HtmlReportGenerator.generateHtml(session, apk))
-                    f
-                }
-                else -> {
-                    val f = File(exportsDir, "elenchos_report_${cleanPkg}_${session.id}.md")
-                    f.writeText(MarkdownReportGenerator.generateReport(session, apk))
-                    f
-                }
+        val cleanPkg = apk.packageName.replace('.', '_')
+        val (fileName, content) = when (format.lowercase()) {
+            "json", "ai_json" -> {
+                val pkg = AIFixPackageGenerator.generatePackage(session, apk)
+                "elenchos_ai_fix_${cleanPkg}_${session.id}.json" to AIFixPackageGenerator.exportJson(pkg)
             }
-            file
+            "html" -> {
+                "elenchos_report_${cleanPkg}_${session.id}.html" to HtmlReportGenerator.generateHtml(session, apk)
+            }
+            else -> {
+                "elenchos_report_${cleanPkg}_${session.id}.md" to MarkdownReportGenerator.generateReport(session, apk)
+            }
         }
+
+        val targetFile = File(exportsDir, fileName)
+        mutex.withLock {
+            targetFile.writeText(content)
+        }
+        targetFile
     }
 }

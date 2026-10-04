@@ -87,7 +87,7 @@ import com.example.elenchos.ui.navigation.NavigationScreen
 
 @Composable
 fun MainNavigation(
-    viewModel: ElenchosViewModel = viewModel()
+    viewModel: ElenchosViewModel = viewModel(factory = ElenchosViewModel.Factory)
 ) {
     val currentScreen by viewModel.currentScreen.collectAsState()
     val activeSession by viewModel.activeSession.collectAsState()

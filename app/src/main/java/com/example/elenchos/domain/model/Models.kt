@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
  * P3 - Medium (Non-critical defect)
  * P4 - Low (Minor issue, polish, optimization or edge case)
  */
+@Serializable
 enum class IssueSeverity(val code: String, val label: String, val weight: Int) {
     P0("P0", "BLOCKER", 40),
     P1("P1", "CRITICAL", 25),
@@ -18,6 +19,7 @@ enum class IssueSeverity(val code: String, val label: String, val weight: Int) {
     P4("P4", "LOW", 3)
 }
 
+@Serializable
 enum class IssueConfidence(val label: String) {
     CONFIRMED("Confirmed"),
     HIGH("High"),
@@ -25,6 +27,7 @@ enum class IssueConfidence(val label: String) {
     LOW("Low")
 }
 
+@Serializable
 enum class IssueCategory(val label: String) {
     CRASH("Crash / Uncaught Exception"),
     ANR("ANR / Unresponsive UI"),
@@ -40,6 +43,7 @@ enum class IssueCategory(val label: String) {
     ACCESSIBILITY("Accessibility Missing")
 }
 
+@Serializable
 enum class TestStatus(val label: String) {
     IDLE("Ready for Testing"),
     RUNNING("Testing in Progress"),
@@ -50,6 +54,7 @@ enum class TestStatus(val label: String) {
     CANCELLED("Testing Aborted")
 }
 
+@Serializable
 enum class TestExecutionCapability(val label: String) {
     TESTED("Tested"),
     PARTIALLY_TESTED("Partially Tested"),
@@ -116,6 +121,7 @@ data class TestConfiguration(
     val enableNetworkResilience: Boolean = true,
     val enableSecurityAudit: Boolean = true
 ) {
+    @Serializable
     enum class TestMode(val label: String, val description: String) {
         QUICK("Quick Scan", "Static manifest, security scan, and baseline launch validation"),
         STANDARD("Standard Test", "Static analysis + UI exploration + input fuzzing + lifecycle checks"),
@@ -233,6 +239,7 @@ data class TerminalLogEntry(
     val tag: String,
     val message: String
 ) {
+    @Serializable
     enum class LogLevel {
         INFO, TEST, WARN, FAIL, SUCCESS, CRITICAL
     }
@@ -281,3 +288,51 @@ data class AIFixPackage(
         val recommendedFix: String
     )
 }
+
+@Serializable
+data class SessionDiff(
+    val baseSessionId: String,
+    val compareSessionId: String,
+    val regressions: List<Issue>,
+    val resolvedIssues: List<Issue>,
+    val persistentIssues: List<Issue>,
+    val healthScoreDelta: Int,
+    val stabilityDelta: Int,
+    val securityDelta: Int,
+    val functionalityDelta: Int
+) {
+    companion object {
+        fun calculate(previous: TestSession, current: TestSession): SessionDiff {
+            val prevIssues = previous.issues
+            val currIssues = current.issues
+
+            val prevTitles = prevIssues.map { it.title }.toSet()
+            val currTitles = currIssues.map { it.title }.toSet()
+
+            val regressions = currIssues.filter { it.title !in prevTitles }
+            val resolved = prevIssues.filter { it.title !in currTitles }
+            val persistent = currIssues.filter { it.title in prevTitles }
+
+            val prevHealth = previous.healthScore
+            val currHealth = current.healthScore
+
+            val scoreDelta = (currHealth?.overallScore ?: 0) - (prevHealth?.overallScore ?: 0)
+            val stabDelta = (currHealth?.stabilityScore ?: 0) - (prevHealth?.stabilityScore ?: 0)
+            val secDelta = (currHealth?.securityScore ?: 0) - (prevHealth?.securityScore ?: 0)
+            val funcDelta = (currHealth?.functionalityScore ?: 0) - (prevHealth?.functionalityScore ?: 0)
+
+            return SessionDiff(
+                baseSessionId = previous.id,
+                compareSessionId = current.id,
+                regressions = regressions,
+                resolvedIssues = resolved,
+                persistentIssues = persistent,
+                healthScoreDelta = scoreDelta,
+                stabilityDelta = stabDelta,
+                securityDelta = secDelta,
+                functionalityDelta = funcDelta
+            )
+        }
+    }
+}
+

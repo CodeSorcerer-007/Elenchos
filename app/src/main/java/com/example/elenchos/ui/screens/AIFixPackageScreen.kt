@@ -29,8 +29,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -68,10 +68,10 @@ fun AIFixPackageScreen(
     modifier: Modifier = Modifier
 ) {
     val session by viewModel.activeSession.collectAsState()
-    val apk by viewModel.selectedApk.collectAsState()
+    val selectedApk by viewModel.selectedApk.collectAsState()
     val context = LocalContext.current
 
-    if (session == null || apk == null) {
+    if (session == null) {
         Column(
             modifier = modifier
                 .fillMaxSize()
@@ -89,7 +89,19 @@ fun AIFixPackageScreen(
     }
 
     val s = session!!
-    val a = apk!!
+    val a = selectedApk ?: com.example.elenchos.domain.model.APKArtifact(
+        id = s.apkArtifactId,
+        filePath = "",
+        sha256 = s.apkSha256,
+        fileSizeBytes = 0L,
+        formattedSize = "Archived",
+        appName = s.appName,
+        packageName = s.packageName,
+        versionName = s.versionName,
+        versionCode = 0,
+        minSdk = 24,
+        targetSdk = 35
+    )
 
     val pkg = remember(s, a) { AIFixPackageGenerator.generatePackage(s, a) }
     val promptText = remember(pkg) { AIFixPackageGenerator.generateAIAgentHandoffPrompt(pkg) }
@@ -182,6 +194,7 @@ fun AIFixPackageScreen(
                         onClick = {
                             val clip = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             clip.setPrimaryClip(ClipData.newPlainText("Elenchos AI JSON", jsonText))
+                            viewModel.showToast("Copied AI Fix JSON to clipboard!")
                         },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(6.dp)
@@ -197,7 +210,7 @@ fun AIFixPackageScreen(
         Spacer(modifier = Modifier.height(14.dp))
 
         // View Tabs
-        TabRow(
+        PrimaryTabRow(
             selectedTabIndex = selectedTab,
             containerColor = LabSurface,
             contentColor = LabPrimary,

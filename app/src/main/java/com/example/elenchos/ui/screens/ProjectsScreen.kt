@@ -37,8 +37,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -189,7 +189,7 @@ fun ProjectsScreen(
 
             selectedApk?.let { apk ->
                 // Tabs
-                TabRow(
+                PrimaryTabRow(
                     selectedTabIndex = selectedTab,
                     containerColor = LabSurface,
                     contentColor = LabPrimary,
@@ -238,7 +238,10 @@ fun ProjectsScreen(
                                                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
                                             }
                                             context.startActivity(installIntent)
-                                        } catch (_: Exception) {}
+                                        } catch (e: Exception) {
+                                            android.util.Log.w("ProjectsScreen", "Failed launching installer intent: ${e.message}")
+                                            viewModel.showToast("Could not launch package installer: ${e.message}")
+                                        }
                                     },
                                     onDeleteClick = { viewModel.deleteSelectedApk() }
                                 )

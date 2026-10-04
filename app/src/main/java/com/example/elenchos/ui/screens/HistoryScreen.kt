@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.elenchos.domain.model.IssueSeverity
+import com.example.elenchos.domain.model.SessionDiff
 import com.example.elenchos.domain.model.TestSession
 import com.example.elenchos.theme.LabBackground
 import com.example.elenchos.theme.LabCardBorder
@@ -263,6 +264,7 @@ private fun ComparisonDiffCard(
     sessionB: TestSession,
     onDismiss: () -> Unit
 ) {
+    val diff = SessionDiff.calculate(sessionA, sessionB)
     val scoreA = sessionA.healthScore?.overallScore ?: 0
     val scoreB = sessionB.healthScore?.overallScore ?: 0
     val p0A = sessionA.issues.count { it.severity == IssueSeverity.P0 }
@@ -309,10 +311,44 @@ private fun ComparisonDiffCard(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            DiffRow("Health Score", "$scoreA → $scoreB", if (scoreB >= scoreA) "+${scoreB - scoreA}" else "${scoreB - scoreA}", scoreB >= scoreA)
+            DiffRow("Health Score", "$scoreA → $scoreB", if (diff.healthScoreDelta >= 0) "+${diff.healthScoreDelta}" else "${diff.healthScoreDelta}", diff.healthScoreDelta >= 0)
             DiffRow("P0 Blockers", "$p0A → $p0B", if (p0B <= p0A) "Resolved" else "+${p0B - p0A} (REGRESSION)", p0B <= p0A)
             DiffRow("P1 Critical", "$p1A → $p1B", if (p1B <= p1A) "Improved" else "+${p1B - p1A} (REGRESSION)", p1B <= p1A)
             DiffRow("P2 High", "$p2A → $p2B", if (p2B <= p2A) "Improved" else "+${p2B - p2A}", p2B <= p2A)
+
+            if (diff.regressions.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "REGRESSIONS INTRODUCED (${diff.regressions.size})",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = LabSeverityP0
+                )
+                diff.regressions.take(3).forEach { r ->
+                    Text(
+                        text = "• [${r.severity.code}] ${r.title}",
+                        fontSize = 11.sp,
+                        color = LabTextPrimary
+                    )
+                }
+            }
+
+            if (diff.resolvedIssues.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "RESOLVED ISSUES (${diff.resolvedIssues.size})",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = LabStatusPass
+                )
+                diff.resolvedIssues.take(3).forEach { res ->
+                    Text(
+                        text = "✓ [${res.severity.code}] ${res.title}",
+                        fontSize = 11.sp,
+                        color = LabTextSecondary
+                    )
+                }
+            }
         }
     }
 }

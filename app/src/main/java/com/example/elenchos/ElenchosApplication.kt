@@ -16,12 +16,18 @@ class ElenchosApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        instance = this
+        _instance = this
         container = DefaultAppContainer(this)
     }
 
     companion object {
-        lateinit var instance: ElenchosApplication
-            private set
+        @Volatile
+        private var _instance: ElenchosApplication? = null
+
+        val instance: ElenchosApplication
+            get() = _instance ?: throw IllegalStateException("ElenchosApplication is not initialized")
+
+        val instanceOrNull: ElenchosApplication?
+            get() = _instance
     }
 }

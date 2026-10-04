@@ -6,10 +6,12 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.content.pm.PermissionInfo
 import android.os.Build
+import android.util.Log
 import com.example.elenchos.domain.model.APKArtifact
 import com.example.elenchos.domain.model.ComponentInfo
 import java.io.File
 import java.io.FileInputStream
+import java.io.RandomAccessFile
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.zip.ZipEntry
@@ -78,18 +80,19 @@ object ApkParser {
             ?: throw IllegalArgumentException("Could not parse APK archive info: ${apkFile.name}")
 
         val appInfo: ApplicationInfo = packageInfo.applicationInfo ?: ApplicationInfo().apply {
-            packageName = packageInfo.packageName ?: ""
+            packageName = packageInfo.packageName
         }
         appInfo.sourceDir = apkFile.absolutePath
         appInfo.publicSourceDir = apkFile.absolutePath
 
         val appName = try {
             pm.getApplicationLabel(appInfo).toString()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.d("ApkParser", "Could not extract application label, falling back to file name: ${e.message}")
             apkFile.nameWithoutExtension
         }
 
-        val packageName = packageInfo.packageName ?: apkFile.nameWithoutExtension
+        val packageName = packageInfo.packageName.ifEmpty { apkFile.nameWithoutExtension }
         val versionName = packageInfo.versionName ?: "1.0"
         val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             packageInfo.longVersionCode
@@ -108,10 +111,19 @@ object ApkParser {
         // Security flags
         val isDebuggable = (appInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
         val allowsBackup = (appInfo.flags and ApplicationInfo.FLAG_ALLOW_BACKUP) != 0
-        val usesCleartextTraffic = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            (appInfo.flags and ApplicationInfo.FLAG_USES_CLEARTEXT_TRAFFIC) != 0
+
+        val manifestExplicitCleartext = inspectManifestCleartext(apkFile)
+        val usesCleartextTraffic = if (manifestExplicitCleartext != null) {
+            manifestExplicitCleartext
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (targetSdk < 28) {
+                // Prior to Android 9 (API 28), cleartext was allowed by default
+                (appInfo.flags and ApplicationInfo.FLAG_USES_CLEARTEXT_TRAFFIC) != 0 || true
+            } else {
+                (appInfo.flags and ApplicationInfo.FLAG_USES_CLEARTEXT_TRAFFIC) != 0
+            }
         } else {
-            true
+            targetSdk < 28
         }
 
         // Permissions
@@ -158,7 +170,8 @@ object ApkParser {
         val isInstalled = try {
             pm.getPackageInfo(packageName, 0)
             true
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.d("ApkParser", "Package $packageName is not currently installed: ${e.message}")
             false
         }
 
@@ -199,7 +212,7 @@ object ApkParser {
         )
     }
 
-    private data class ZipAnalysisResult(
+    internal data class ZipAnalysisResult(
         val architectures: List<String>,
         val is16KbAligned: Boolean,
         val dexCount: Int,
@@ -207,11 +220,10 @@ object ApkParser {
         val detectedSecrets: List<String>
     )
 
-    private fun analyzeZipStructure(file: File): ZipAnalysisResult {
+    internal fun analyzeZipStructure(file: File): ZipAnalysisResult {
         val archs = mutableSetOf<String>()
         var dexCount = 0
         var assetsCount = 0
-        var is16KbAligned = true
         val secrets = mutableListOf<String>()
 
         try {
@@ -226,40 +238,52 @@ object ApkParser {
                         if (parts.size >= 2) {
                             archs.add(parts[1])
                         }
-                        // Android 15/16 16KB check: check uncompressed alignment if stored
-                        if (entry.method == ZipEntry.STORED) {
-                            // In zip files, stored entries should be 16KB aligned
-                            // We inspect the name and flag if non-standard
-                        }
                     } else if (name.endsWith(".dex")) {
                         dexCount++
-                        // Quick scan DEX strings for leaks (first 64KB of dex)
-                        if (secrets.size < 10) {
+                        // Stream scan DEX strings across chunks with overlap (up to 2MB per DEX)
+                        if (secrets.size < 15) {
                             try {
                                 zip.getInputStream(entry).use { stream ->
-                                    val buffer = ByteArray(65536)
-                                    val read = stream.read(buffer)
-                                    if (read > 0) {
-                                        val content = String(buffer, 0, read, Charsets.ISO_8859_1)
+                                    val buffer = ByteArray(131072) // 128KB chunk
+                                    var bytesRead: Int
+                                    var totalBytesScanned = 0L
+                                    val maxScanBytes = 2 * 1024 * 1024L
+                                    var carryOver = ""
+
+                                    while (stream.read(buffer).also { bytesRead = it } != -1 &&
+                                        totalBytesScanned < maxScanBytes &&
+                                        secrets.size < 15
+                                    ) {
+                                        totalBytesScanned += bytesRead
+                                        val chunkStr = carryOver + String(buffer, 0, bytesRead, Charsets.ISO_8859_1)
                                         for (pattern in SECRET_PATTERNS) {
-                                            val match = pattern.find(content)
+                                            val match = pattern.find(chunkStr)
                                             if (match != null) {
-                                                secrets.add("Pattern match (${pattern.pattern.take(15)}...) in $name")
+                                                val matchTag = "Pattern match (${pattern.pattern.take(15)}...) in $name"
+                                                if (!secrets.contains(matchTag)) {
+                                                    secrets.add(matchTag)
+                                                }
                                                 break
                                             }
                                         }
+                                        carryOver = chunkStr.takeLast(256)
                                     }
                                 }
-                            } catch (_: Exception) {}
+                            } catch (e: Exception) {
+                                Log.w("ApkParser", "Failed scanning $name for secrets: ${e.message}")
+                            }
                         }
                     } else if (name.startsWith("assets/")) {
                         assetsCount++
                     }
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w("ApkParser", "Error reading APK zip structure: ${e.message}")
             dexCount = 1
         }
+
+        val is16KbAligned = verify16KbAlignment(file)
 
         return ZipAnalysisResult(
             architectures = archs.toList().sorted(),
@@ -268,6 +292,256 @@ object ApkParser {
             assetsCount = assetsCount,
             detectedSecrets = secrets.distinct()
         )
+    }
+
+    internal fun verify16KbAlignment(file: File): Boolean {
+        return try {
+            RandomAccessFile(file, "r").use { raf ->
+                val length = raf.length()
+                if (length < 22) return true
+
+                // Locate End of Central Directory (EOCD)
+                var eocdOffset = -1L
+                val searchLimit = (length - 65557L).coerceAtLeast(0L)
+                var p = length - 22
+                while (p >= searchLimit) {
+                    raf.seek(p)
+                    // Signature 0x06054b50 in little endian order
+                    if (raf.readInt() == 0x504b0506) {
+                        eocdOffset = p
+                        break
+                    }
+                    p--
+                }
+                if (eocdOffset == -1L) return true
+
+                raf.seek(eocdOffset + 10)
+                val totalEntries = readShortLittleEndian(raf)
+                val cdSize = readIntLittleEndian(raf)
+                val cdOffset = readIntLittleEndian(raf).toLong() and 0xFFFFFFFFL
+
+                if (cdOffset + cdSize > length) return true
+
+                var hasNativeLibs = false
+                var currentPos = cdOffset
+
+                for (i in 0 until totalEntries) {
+                    raf.seek(currentPos)
+                    val sig = raf.readInt()
+                    if (sig != 0x504b0102) break // Central Directory record signature 0x02014b50
+
+                    raf.seek(currentPos + 10)
+                    val compressionMethod = readShortLittleEndian(raf)
+                    raf.seek(currentPos + 28)
+                    val nameLen = readShortLittleEndian(raf)
+                    val extraLen = readShortLittleEndian(raf)
+                    val commentLen = readShortLittleEndian(raf)
+                    raf.seek(currentPos + 42)
+                    val localHeaderOffset = readIntLittleEndian(raf).toLong() and 0xFFFFFFFFL
+
+                    val nameBytes = ByteArray(nameLen)
+                    raf.seek(currentPos + 46)
+                    raf.readFully(nameBytes)
+                    val entryName = String(nameBytes, Charsets.UTF_8)
+
+                    currentPos += 46 + nameLen + extraLen + commentLen
+
+                    if (entryName.startsWith("lib/") && entryName.endsWith(".so")) {
+                        hasNativeLibs = true
+
+                        // Requirement 1: Native libraries must be STORED uncompressed for direct 16KB mmap
+                        if (compressionMethod != 0) {
+                            return false
+                        }
+
+                        // Requirement 2: Local header data offset must be 16KB-aligned (0x4000)
+                        raf.seek(localHeaderOffset)
+                        val localSig = raf.readInt()
+                        if (localSig != 0x504b0304) continue
+
+                        raf.seek(localHeaderOffset + 26)
+                        val localNameLen = readShortLittleEndian(raf)
+                        val localExtraLen = readShortLittleEndian(raf)
+                        val dataOffset = localHeaderOffset + 30 + localNameLen + localExtraLen
+
+                        if (dataOffset % 16384L != 0L) {
+                            return false
+                        }
+
+                        // Requirement 3: ELF PT_LOAD segment alignment check for 64-bit binaries
+                        if (raf.length() >= dataOffset + 64) {
+                            raf.seek(dataOffset)
+                            val elfMagic = ByteArray(4)
+                            raf.readFully(elfMagic)
+                            if (elfMagic[0] == 0x7f.toByte() && elfMagic[1] == 'E'.code.toByte() &&
+                                elfMagic[2] == 'L'.code.toByte() && elfMagic[3] == 'F'.code.toByte()) {
+                                val eiClass = raf.readByte().toInt()
+                                if (eiClass == 2) { // 64-bit ELF
+                                    raf.seek(dataOffset + 32)
+                                    val phOff = readLongLittleEndian(raf)
+                                    raf.seek(dataOffset + 54)
+                                    val phEntSize = readShortLittleEndian(raf)
+                                    val phNum = readShortLittleEndian(raf)
+
+                                    if (phEntSize >= 56 && phNum in 1..64) {
+                                        for (phIdx in 0 until phNum) {
+                                            val entryPos = dataOffset + phOff + (phIdx * phEntSize)
+                                            if (entryPos + 56 <= raf.length()) {
+                                                raf.seek(entryPos)
+                                                val pType = readIntLittleEndian(raf)
+                                                if (pType == 1) { // PT_LOAD segment
+                                                    raf.seek(entryPos + 48)
+                                                    val pAlign = readLongLittleEndian(raf)
+                                                    if (pAlign in 1..16383) {
+                                                        // Sub-16KB alignment indicates legacy 4KB compilation
+                                                        return false
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                true
+            }
+        } catch (e: Exception) {
+            Log.w("ApkParser", "Error verifying 16KB alignment: ${e.message}", e)
+            true
+        }
+    }
+
+    internal fun inspectManifestCleartext(apkFile: File): Boolean? {
+        return try {
+            ZipFile(apkFile).use { zip ->
+                val entry = zip.getEntry("AndroidManifest.xml") ?: return null
+                zip.getInputStream(entry).use { stream ->
+                    val bytes = stream.readBytes()
+                    parseAxmlCleartextTraffic(bytes)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("ApkParser", "Failed to inspect AndroidManifest.xml cleartext attribute: ${e.message}")
+            null
+        }
+    }
+
+    internal fun parseAxmlCleartextTraffic(bytes: ByteArray): Boolean? {
+        if (bytes.size < 36) return null
+        val magic = getIntLittleEndian(bytes, 0)
+        if (magic != 0x00080003 && magic != 0x00080001) return null
+
+        val stringChunkType = getIntLittleEndian(bytes, 8)
+        if (stringChunkType != 0x001C0001) return null
+
+        val stringCount = getIntLittleEndian(bytes, 16)
+        val flags = getIntLittleEndian(bytes, 24)
+        val isUtf8 = (flags and (1 shl 8)) != 0
+        val stringsStart = 8 + getIntLittleEndian(bytes, 28)
+
+        var cleartextAttrIndex = -1
+        for (i in 0 until stringCount) {
+            val offsetInOffsets = 36 + (i * 4)
+            if (offsetInOffsets + 4 > bytes.size) break
+            val strOffset = stringsStart + getIntLittleEndian(bytes, offsetInOffsets)
+            if (strOffset < 0 || strOffset >= bytes.size) continue
+
+            val str = if (isUtf8) {
+                var lenOffset = strOffset
+                if (lenOffset >= bytes.size) continue
+                var len = bytes[lenOffset].toInt() and 0xFF
+                if (len and 0x80 != 0) lenOffset += 2 else lenOffset += 1
+                if (lenOffset >= bytes.size) continue
+                var byteLen = bytes[lenOffset].toInt() and 0xFF
+                if (byteLen and 0x80 != 0) lenOffset += 2 else lenOffset += 1
+                if (lenOffset + byteLen <= bytes.size && byteLen > 0) {
+                    String(bytes, lenOffset, byteLen, Charsets.UTF_8)
+                } else ""
+            } else {
+                var lenOffset = strOffset
+                if (lenOffset + 1 >= bytes.size) continue
+                var charCount = getShortLittleEndian(bytes, lenOffset)
+                if (charCount and 0x8000 != 0) lenOffset += 4 else lenOffset += 2
+                val byteLen = charCount * 2
+                if (lenOffset + byteLen <= bytes.size && byteLen > 0) {
+                    String(bytes, lenOffset, byteLen, Charsets.UTF_16LE)
+                } else ""
+            }
+
+            if (str == "usesCleartextTraffic") {
+                cleartextAttrIndex = i
+                break
+            }
+        }
+
+        if (cleartextAttrIndex == -1) return null
+
+        var offset = 8 + getIntLittleEndian(bytes, 12)
+        while (offset + 8 <= bytes.size) {
+            val chunkType = getIntLittleEndian(bytes, offset)
+            val chunkSize = getIntLittleEndian(bytes, offset + 4)
+            if (chunkSize <= 0 || offset + chunkSize > bytes.size) break
+
+            if (chunkType == 0x00100102) { // START_ELEMENT
+                val attrStart = getShortLittleEndian(bytes, offset + 20)
+                val attrSize = getShortLittleEndian(bytes, offset + 22)
+                val attrCount = getShortLittleEndian(bytes, offset + 24)
+
+                var attrOffset = offset + attrStart
+                for (a in 0 until attrCount) {
+                    if (attrOffset + 20 > offset + chunkSize) break
+                    val nameIdx = getIntLittleEndian(bytes, attrOffset + 4)
+                    val typedValData = getIntLittleEndian(bytes, attrOffset + 16)
+
+                    if (nameIdx == cleartextAttrIndex) {
+                        return typedValData != 0
+                    }
+                    attrOffset += attrSize
+                }
+            }
+            offset += chunkSize
+        }
+        return null
+    }
+
+    private fun readShortLittleEndian(raf: RandomAccessFile): Int {
+        val b1 = raf.read()
+        val b2 = raf.read()
+        if (b1 or b2 < 0) return 0
+        return (b2 shl 8) or b1
+    }
+
+    private fun readIntLittleEndian(raf: RandomAccessFile): Int {
+        val b1 = raf.read()
+        val b2 = raf.read()
+        val b3 = raf.read()
+        val b4 = raf.read()
+        if (b1 or b2 or b3 or b4 < 0) return 0
+        return (b4 shl 24) or (b3 shl 16) or (b2 shl 8) or b1
+    }
+
+    private fun readLongLittleEndian(raf: RandomAccessFile): Long {
+        val low = readIntLittleEndian(raf).toLong() and 0xFFFFFFFFL
+        val high = readIntLittleEndian(raf).toLong() and 0xFFFFFFFFL
+        return (high shl 32) or low
+    }
+
+    private fun getShortLittleEndian(bytes: ByteArray, offset: Int): Int {
+        if (offset + 1 >= bytes.size) return 0
+        val b1 = bytes[offset].toInt() and 0xFF
+        val b2 = bytes[offset + 1].toInt() and 0xFF
+        return (b2 shl 8) or b1
+    }
+
+    private fun getIntLittleEndian(bytes: ByteArray, offset: Int): Int {
+        if (offset + 3 >= bytes.size) return 0
+        val b1 = bytes[offset].toInt() and 0xFF
+        val b2 = bytes[offset + 1].toInt() and 0xFF
+        val b3 = bytes[offset + 2].toInt() and 0xFF
+        val b4 = bytes[offset + 3].toInt() and 0xFF
+        return (b4 shl 24) or (b3 shl 16) or (b2 shl 8) or b1
     }
 
     private fun calculateSha256(file: File): String {
@@ -281,7 +555,8 @@ object ApkParser {
                 }
             }
             digest.digest().joinToString("") { "%02x".format(it) }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w("ApkParser", "Failed to compute SHA-256 for ${file.name}: ${e.message}")
             "SHA256-UNAVAILABLE"
         }
     }
@@ -303,7 +578,8 @@ object ApkParser {
             } else {
                 "UNSIGNED_OR_DEBUG_KEY"
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w("ApkParser", "Failed to extract certificate fingerprint: ${e.message}")
             "NOT_OBTAINABLE"
         }
     }

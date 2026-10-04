@@ -238,6 +238,56 @@ object StaticSecurityAnalyzer {
                     )
                 )
             }
+
+            if (!apk.is16KbPageAligned) {
+                issues.add(
+                    Issue(
+                        id = "CMP-16KB-${UUID.randomUUID().toString().take(6).uppercase()}",
+                        severity = IssueSeverity.P0,
+                        confidence = IssueConfidence.CONFIRMED,
+                        category = IssueCategory.COMPATIBILITY,
+                        title = "Native libraries are not 16KB page-aligned (Android 15+ compatibility failure)",
+                        description = "The APK contains native shared libraries (.so) that are compressed (method != STORED) or whose 64-bit ELF PT_LOAD segments are compiled with standard 4KB page alignment instead of 16KB boundaries (p_align < 16384). Beginning with Android 15, devices configured with 16KB page sizes will fail to mmap these libraries, causing fatal process crashes.",
+                        affectedScreen = "lib/ native libraries",
+                        reproductionSteps = listOf(
+                            "1. Inspect APK ZIP central directory for lib/**/*.so entries.",
+                            "2. Check if compression method is STORED (uncompressed) and data offset is aligned to 16384 bytes.",
+                            "3. Inspect ELF 64-bit headers for PT_LOAD segment alignment (p_align >= 16384).",
+                            "4. Attempt launch on Android 15 device with 16KB page size enabled."
+                        ),
+                        expectedBehavior = "Native libraries must be uncompressed on 16KB boundaries and built with 16KB page alignment.",
+                        actualBehavior = "is16KbPageAligned evaluated to false for packaged native libraries.",
+                        rootCauseHypothesis = "NDK toolchain version was < r27, or -Wl,-z,max-page-size=16384 linker flag was omitted, or APK packaging compressed .so files.",
+                        hypothesisConfidence = IssueConfidence.CONFIRMED,
+                        recommendedFix = "Update Android Gradle Plugin to 8.5.1+, NDK to r27+, add `android.bundle.enableUncompressedNativeLibs=true` in gradle.properties, and compile with `-Wl,-z,max-page-size=16384`."
+                    )
+                )
+            }
+        }
+
+        // Target SDK check
+        if (apk.targetSdk < 34) {
+            issues.add(
+                Issue(
+                    id = "CMP-SDK-${UUID.randomUUID().toString().take(6).uppercase()}",
+                    severity = IssueSeverity.P2,
+                    confidence = IssueConfidence.CONFIRMED,
+                    category = IssueCategory.COMPATIBILITY,
+                    title = "Target SDK version (${apk.targetSdk}) is below Google Play requirements",
+                    description = "Google Play requires new apps and app updates to target at least API 34 (Android 14) or higher. Targeting API ${apk.targetSdk} prevents Google Play submission and misses critical security and battery optimizations.",
+                    affectedScreen = "AndroidManifest.xml (<uses-sdk>)",
+                    reproductionSteps = listOf(
+                        "1. Inspect targetSdkVersion attribute in APK manifest.",
+                        "2. Observe targetSdkVersion is ${apk.targetSdk}.",
+                        "3. Verify against current Google Play target API policy."
+                    ),
+                    expectedBehavior = "targetSdkVersion must be at least 34 (Android 14) or 35 (Android 15).",
+                    actualBehavior = "targetSdkVersion is ${apk.targetSdk}.",
+                    rootCauseHypothesis = "Build script targetSdk has not been updated to the latest annual Android platform release.",
+                    hypothesisConfidence = IssueConfidence.CONFIRMED,
+                    recommendedFix = "Update `targetSdk = 35` in app build.gradle.kts and audit any behavioral changes."
+                )
+            )
         }
 
         // 7. Detected hardcoded secrets

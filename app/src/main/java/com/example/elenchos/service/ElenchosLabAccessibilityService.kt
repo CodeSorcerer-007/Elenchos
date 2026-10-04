@@ -85,6 +85,7 @@ class ElenchosLabAccessibilityService : AccessibilityService() {
         val isInteractive = node.isClickable || node.isEditable || node.isScrollable ||
                 node.isCheckable || (node.text?.isNotBlank() == true)
 
+        var keepNode = false
         if (isInteractive && bounds.width() > 0 && bounds.height() > 0) {
             list.add(
                 DiscoveredUiElement(
@@ -100,30 +101,60 @@ class ElenchosLabAccessibilityService : AccessibilityService() {
                     accessibilityNodeInfo = node
                 )
             )
+            keepNode = true
         }
 
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             traverseNode(child, list)
         }
+
+        if (!keepNode) {
+            safeRecycle(node)
+        }
     }
 
     override fun onInterrupt() {}
 
+    override fun onUnbind(intent: Intent?): Boolean {
+        cleanup()
+        return super.onUnbind(intent)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        cleanup()
+    }
+
+    private fun cleanup() {
         if (instance == this) {
             instance = null
+            activeTargetPackage = null
+            onSnapshotCaptured = null
+            onCrashOrAnrDetected = null
         }
     }
 
     companion object {
+        @Volatile
         var instance: ElenchosLabAccessibilityService? = null
         val isServiceRunning: Boolean get() = instance != null
 
+        @Volatile
         var activeTargetPackage: String? = null
+        @Volatile
         var onSnapshotCaptured: ((UiSnapshot) -> Unit)? = null
+        @Volatile
         var onCrashOrAnrDetected: ((String) -> Unit)? = null
+
+        @Suppress("DEPRECATION")
+        fun safeRecycle(node: AccessibilityNodeInfo?) {
+            try {
+                if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    node?.recycle()
+                }
+            } catch (_: Exception) {}
+        }
 
         fun isAccessibilityEnabled(context: Context): Boolean {
             return try {
@@ -141,7 +172,8 @@ class ElenchosLabAccessibilityService : AccessibilityService() {
                 } else {
                     false
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                android.util.Log.w("AccessibilityService", "Failed to check accessibility status: ${e.message}")
                 false
             }
         }
@@ -156,7 +188,8 @@ class ElenchosLabAccessibilityService : AccessibilityService() {
         fun performClickElement(element: DiscoveredUiElement): Boolean {
             return try {
                 element.accessibilityNodeInfo?.performAction(AccessibilityNodeInfo.ACTION_CLICK) ?: false
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                android.util.Log.w("AccessibilityService", "Failed click element: ${e.message}")
                 false
             }
         }
@@ -167,23 +200,30 @@ class ElenchosLabAccessibilityService : AccessibilityService() {
                     putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
                 }
                 element.accessibilityNodeInfo?.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args) ?: false
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                android.util.Log.w("AccessibilityService", "Failed input text: ${e.message}")
                 false
             }
         }
 
         fun performScrollForward(): Boolean {
+            val root = instance?.rootInActiveWindow
             return try {
-                instance?.rootInActiveWindow?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) ?: false
-            } catch (_: Exception) {
+                val scrolled = root?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) ?: false
+                scrolled
+            } catch (e: Exception) {
+                android.util.Log.w("AccessibilityService", "Failed scroll: ${e.message}")
                 false
+            } finally {
+                safeRecycle(root)
             }
         }
 
         fun performBackAction(): Boolean {
             return try {
                 instance?.performGlobalAction(GLOBAL_ACTION_BACK) ?: false
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                android.util.Log.w("AccessibilityService", "Failed back action: ${e.message}")
                 false
             }
         }

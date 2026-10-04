@@ -4,10 +4,15 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.elenchos.ElenchosApplication
 import com.example.elenchos.data.apk.ApkParser
 import com.example.elenchos.domain.model.AIFixPackage
@@ -22,6 +27,7 @@ import com.example.elenchos.domain.model.TestStatus
 import com.example.elenchos.reporting.AIFixPackageGenerator
 import com.example.elenchos.service.ElenchosLabAccessibilityService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,6 +46,8 @@ class ElenchosViewModel(
     private val repository: ITestLabRepository = (application as? ElenchosApplication)?.repository ?: TestLabRepository(application),
     private val testRunner: ITestRunnerEngine = (application as? ElenchosApplication)?.testRunnerEngine ?: TestRunnerEngine(application)
 ) : AndroidViewModel(application) {
+
+    private var testExecutionJob: Job? = null
 
     private val _currentScreen = MutableStateFlow(NavigationScreen.HOME)
     val currentScreen: StateFlow<NavigationScreen> = _currentScreen.asStateFlow()
@@ -94,7 +102,8 @@ class ElenchosViewModel(
         try {
             val app = getApplication<Application>()
             _isAccessibilityEnabled.value = ElenchosLabAccessibilityService.isAccessibilityEnabled(app)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.w("ElenchosViewModel", "Failed checking accessibility status: ${e.message}")
             _isAccessibilityEnabled.value = false
         }
     }
@@ -122,9 +131,19 @@ class ElenchosViewModel(
     fun selectSession(session: TestSession) {
         _activeSession.value = session
         val matchingApk = _apks.value.firstOrNull { it.id == session.apkArtifactId }
-        if (matchingApk != null) {
-            _selectedApk.value = matchingApk
-        }
+        _selectedApk.value = matchingApk ?: APKArtifact(
+            id = session.apkArtifactId,
+            filePath = "",
+            sha256 = session.apkSha256,
+            fileSizeBytes = 0L,
+            formattedSize = "Archived",
+            appName = session.appName,
+            packageName = session.packageName,
+            versionName = session.versionName,
+            versionCode = 0,
+            minSdk = 24,
+            targetSdk = 35
+        )
     }
 
     fun setIssueSeverityFilter(sev: IssueSeverity?) {
@@ -137,6 +156,10 @@ class ElenchosViewModel(
 
     fun selectIssue(issue: Issue?) {
         _selectedIssue.value = issue
+    }
+
+    fun showToast(message: String) {
+        _toastMessage.value = message
     }
 
     fun clearToast() {
@@ -172,9 +195,9 @@ class ElenchosViewModel(
 
     fun startTestSession(config: TestConfiguration = TestConfiguration()) {
         val apk = _selectedApk.value ?: return
-        if (_isTestingRunning.value) return
+        if (testExecutionJob?.isActive == true || _isTestingRunning.value) return
 
-        viewModelScope.launch {
+        testExecutionJob = viewModelScope.launch {
             _isTestingRunning.value = true
             _activeProgressPercent.value = 0
             navigateTo(NavigationScreen.TEST_LAB)
@@ -188,19 +211,70 @@ class ElenchosViewModel(
                 repository.saveTestSession(finalSession)
                 _activeSession.value = finalSession
                 refreshData()
-                _toastMessage.value = "Testing finished. Health Score: ${finalSession.healthScore?.overallScore}/100"
+                if (finalSession.status == TestStatus.CANCELLED) {
+                    _toastMessage.value = "Test session was cancelled."
+                } else {
+                    _toastMessage.value = "Testing finished. Health Score: ${finalSession.healthScore?.overallScore}/100"
+                }
             } catch (e: Exception) {
                 _toastMessage.value = "Test execution failed: ${e.message}"
             } finally {
                 _isTestingRunning.value = false
+                testExecutionJob = null
             }
         }
     }
 
     fun abortCurrentTest() {
         testRunner.abortTest()
-        _isTestingRunning.value = false
-        _toastMessage.value = "Test session aborted by developer"
+        _toastMessage.value = "Aborting test session..."
+    }
+
+    fun exportAndShareReport(format: String = "md") {
+        val session = _activeSession.value ?: return
+        val apk = _selectedApk.value ?: _apks.value.firstOrNull { it.id == session.apkArtifactId } ?: APKArtifact(
+            id = session.apkArtifactId,
+            filePath = "",
+            sha256 = session.apkSha256,
+            fileSizeBytes = 0L,
+            formattedSize = "Archived",
+            appName = session.appName,
+            packageName = session.packageName,
+            versionName = session.versionName,
+            versionCode = 0,
+            minSdk = 24,
+            targetSdk = 35
+        )
+
+        viewModelScope.launch {
+            try {
+                val file = repository.exportReport(session, apk, format)
+                val context = getApplication<Application>()
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+                val mimeType = when (format.lowercase()) {
+                    "html" -> "text/html"
+                    "json", "ai_json" -> "application/json"
+                    else -> "text/markdown"
+                }
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = mimeType
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_SUBJECT, "Elenchos QA Report - ${apk.appName} (${session.id})")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                val chooser = Intent.createChooser(intent, "Share QA Report").apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(chooser)
+                _toastMessage.value = "Report exported: ${file.name}"
+            } catch (e: Exception) {
+                _toastMessage.value = "Failed to export report: ${e.message}"
+            }
+        }
     }
 
     fun copyAIFixPromptToClipboard() {
@@ -245,6 +319,20 @@ class ElenchosViewModel(
             _activeSession.value = null
             refreshData()
             _toastMessage.value = "All laboratory test data cleared"
+        }
+    }
+
+    companion object {
+        val Factory: ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                val application = (this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as? ElenchosApplication)
+                    ?: throw IllegalStateException("Application must be an instance of ElenchosApplication")
+                ElenchosViewModel(
+                    application = application,
+                    repository = application.repository,
+                    testRunner = application.testRunnerEngine
+                )
+            }
         }
     }
 }

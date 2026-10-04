@@ -202,6 +202,7 @@ fun IssueExplorerScreen(
                             val trackerText = BugTrackerFormatter.formatIssueForGitHub(issue, apk?.packageName ?: "com.target.app")
                             val clip = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             clip.setPrimaryClip(ClipData.newPlainText("Issue #${issue.id}", trackerText))
+                            viewModel.showToast("Copied Issue #${issue.id} to clipboard!")
                         }
                     )
                 }

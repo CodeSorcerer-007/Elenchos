@@ -169,4 +169,27 @@ class StaticSecurityAnalyzerTest {
         assertEquals(IssueSeverity.P4, sizeIssue?.severity)
         assertEquals(IssueCategory.PERFORMANCE, sizeIssue?.category)
     }
+
+    @Test
+    fun analyze_unaligned16Kb_flagsP0CompatibilityIssue() {
+        val apk = createBaseApk().copy(
+            is16KbPageAligned = false,
+            nativeArchitectures = listOf("arm64-v8a")
+        )
+        val issues = StaticSecurityAnalyzer.analyze(apk)
+        val issue16Kb = issues.firstOrNull { it.id.startsWith("CMP-16KB") }
+        assertNotNull("Should detect unaligned 16KB native libraries", issue16Kb)
+        assertEquals(IssueSeverity.P0, issue16Kb?.severity)
+        assertEquals(IssueCategory.COMPATIBILITY, issue16Kb?.category)
+    }
+
+    @Test
+    fun analyze_lowTargetSdk_flagsP2CompatibilityIssue() {
+        val apk = createBaseApk().copy(targetSdk = 33)
+        val issues = StaticSecurityAnalyzer.analyze(apk)
+        val sdkIssue = issues.firstOrNull { it.id.startsWith("CMP-SDK") }
+        assertNotNull("Should detect targetSdk below 34", sdkIssue)
+        assertEquals(IssueSeverity.P2, sdkIssue?.severity)
+        assertEquals(IssueCategory.COMPATIBILITY, sdkIssue?.category)
+    }
 }
