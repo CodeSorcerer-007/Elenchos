@@ -1,0 +1,17 @@
+*.iml
+.gradle
+.kotlin
+/local.properties
+local.properties
+/.idea/
+.DS_Store
+/build
+app/build/
+build/
+/captures
+.externalNativeBuild
+.cxx
+window_dump.txt
+screenshot*.png
+sc_*.png
+device_screenshot.png

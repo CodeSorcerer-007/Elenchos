@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Elenchos</string>
+    <string name="accessibility_service_description">Autonomous UI exploration and live testing agent for Elenchos Developer QA Laboratory. Enables automated element discovery, safe interaction, and crash detection on target APKs.</string>
+</resources>
