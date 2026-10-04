@@ -52,7 +52,7 @@ import com.example.elenchos.ui.components.HealthScoreGauge
 import com.example.elenchos.ui.components.LabCard
 import com.example.elenchos.ui.components.SeverityBadge
 import com.example.elenchos.ui.viewmodel.ElenchosViewModel
-import com.example.elenchos.ui.viewmodel.NavigationScreen
+import com.example.elenchos.ui.navigation.NavigationScreen
 
 @Composable
 fun ReportsScreen(
@@ -310,5 +310,20 @@ private fun CoverageRow(label: String, value: String) {
     ) {
         Text(text = label, fontSize = 12.sp, color = LabTextSecondary)
         Text(text = value, fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = LabTextPrimary)
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+@Composable
+private fun ReportsScreenComponentsPreview() {
+    Column(modifier = Modifier.padding(16.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ScoreTile("Stability", "95", Modifier.weight(1f))
+            ScoreTile("Security", "88", Modifier.weight(1f))
+            ScoreTile("Function", "92", Modifier.weight(1f))
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        CoverageRow("Screens Discovered", "8 / 8")
+        CoverageRow("Interactive Elements Exercised", "32 / 38")
     }
 }

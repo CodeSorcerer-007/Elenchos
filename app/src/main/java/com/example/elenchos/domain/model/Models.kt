@@ -64,7 +64,7 @@ enum class TestExecutionCapability(val label: String) {
 @Serializable
 data class APKArtifact(
     val id: String,
-    val fileName: String,
+    val fileName: String = "",
     val filePath: String,
     val sha256: String,
     val fileSizeBytes: Long,
@@ -76,7 +76,7 @@ data class APKArtifact(
     val minSdk: Int,
     val targetSdk: Int,
     val compileSdk: Int = 35,
-    val importedTimestamp: Long,
+    val importedTimestamp: Long = System.currentTimeMillis(),
     val isInstalledOnDevice: Boolean = false,
     val isDebuggable: Boolean = false,
     val allowsBackup: Boolean = true,
@@ -214,7 +214,7 @@ data class TestSession(
     val apkSha256: String,
     val deviceModel: String,
     val androidVersion: String,
-    val startTimestamp: Long,
+    val startTimestamp: Long = System.currentTimeMillis(),
     val endTimestamp: Long? = null,
     val status: TestStatus = TestStatus.IDLE,
     val configuration: TestConfiguration = TestConfiguration(),

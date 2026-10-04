@@ -60,7 +60,7 @@ import com.example.elenchos.theme.LabTextTertiary
 import com.example.elenchos.ui.components.LabCard
 import com.example.elenchos.ui.components.SeverityBadge
 import com.example.elenchos.ui.viewmodel.ElenchosViewModel
-import com.example.elenchos.ui.viewmodel.NavigationScreen
+import com.example.elenchos.ui.navigation.NavigationScreen
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -335,4 +335,27 @@ private fun DiffRow(label: String, transition: String, delta: String, isPositive
             color = if (isPositive) LabStatusPass else LabSeverityP0
         )
     }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+@Composable
+private fun ComparisonDiffCardPreview() {
+    val sampleA = TestSession(
+        id = "SESSION-A",
+        apkArtifactId = "apk-1",
+        packageName = "com.sample.app",
+        appName = "Sample App",
+        versionName = "1.0.0",
+        apkSha256 = "abc123sha",
+        deviceModel = "Pixel 8",
+        androidVersion = "Android 15",
+        startTimestamp = 1700000000000L,
+        healthScore = com.example.elenchos.domain.model.HealthScore(75, 70, 80, 80, 70, 80, 70, "Initial run")
+    )
+    val sampleB = sampleA.copy(
+        id = "SESSION-B",
+        versionName = "1.1.0",
+        healthScore = com.example.elenchos.domain.model.HealthScore(88, 90, 85, 90, 80, 90, 85, "After fix")
+    )
+    ComparisonDiffCard(sessionA = sampleA, sessionB = sampleB, onDismiss = {})
 }

@@ -26,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -273,4 +274,58 @@ fun TerminalConsoleView(
             }
         }
     }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun SeverityBadgePreview() {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(12.dp)) {
+        SeverityBadge(IssueSeverity.P0)
+        SeverityBadge(IssueSeverity.P1)
+        SeverityBadge(IssueSeverity.P2)
+        SeverityBadge(IssueSeverity.P3)
+        SeverityBadge(IssueSeverity.P4)
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun HealthScoreGaugePreview() {
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(12.dp)) {
+        HealthScoreGauge(score = 92, size = 80.dp)
+        HealthScoreGauge(score = 68, size = 80.dp)
+        HealthScoreGauge(score = 45, size = 80.dp)
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun LabCardPreview() {
+    LabCard(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Laboratory Card Component", fontWeight = FontWeight.Bold)
+            Text("Consistent 1dp bordered surface for dark and light telemetry panels.", color = Color.Gray, fontSize = 12.sp)
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun StatusChipPreview() {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(12.dp)) {
+        StatusChip(text = "EXPORTED", color = Color(0xFFF59E0B), bgColor = Color(0xFFFFFBEB))
+        StatusChip(text = "INTERNAL", color = Color(0xFF10B981), bgColor = Color(0xFFECFDF5))
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun TerminalConsoleViewPreview() {
+    val sampleLogs = listOf(
+        TerminalLogEntry("12:00:01", TerminalLogEntry.LogLevel.INFO, "ENGINE", "Elenchos Autonomous Engine initialized"),
+        TerminalLogEntry("12:00:02", TerminalLogEntry.LogLevel.TEST, "STATIC", "Analyzing manifest security flags..."),
+        TerminalLogEntry("12:00:03", TerminalLogEntry.LogLevel.CRITICAL, "SECURITY", "[P0] android:debuggable is true in release build"),
+        TerminalLogEntry("12:00:04", TerminalLogEntry.LogLevel.SUCCESS, "EXPLORE", "Exercised 24 interactive controls")
+    )
+    TerminalConsoleView(logs = sampleLogs, modifier = Modifier.height(180.dp).padding(12.dp))
 }

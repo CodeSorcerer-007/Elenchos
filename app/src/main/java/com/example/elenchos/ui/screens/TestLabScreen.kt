@@ -59,7 +59,7 @@ import com.example.elenchos.ui.components.LabCard
 import com.example.elenchos.ui.components.SeverityBadge
 import com.example.elenchos.ui.components.TerminalConsoleView
 import com.example.elenchos.ui.viewmodel.ElenchosViewModel
-import com.example.elenchos.ui.viewmodel.NavigationScreen
+import com.example.elenchos.ui.navigation.NavigationScreen
 
 @Composable
 fun TestLabScreen(

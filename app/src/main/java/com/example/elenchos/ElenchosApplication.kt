@@ -1,22 +1,23 @@
 package com.example.elenchos
 
 import android.app.Application
-import com.example.elenchos.data.storage.TestLabRepository
-import com.example.elenchos.testing.runtime.TestRunnerEngine
+import com.example.elenchos.data.storage.ITestLabRepository
+import com.example.elenchos.di.AppContainer
+import com.example.elenchos.di.DefaultAppContainer
+import com.example.elenchos.testing.runtime.ITestRunnerEngine
 
 class ElenchosApplication : Application() {
 
-    lateinit var repository: TestLabRepository
+    lateinit var container: AppContainer
         private set
 
-    lateinit var testRunnerEngine: TestRunnerEngine
-        private set
+    val repository: ITestLabRepository get() = container.repository
+    val testRunnerEngine: ITestRunnerEngine get() = container.testRunnerEngine
 
     override fun onCreate() {
         super.onCreate()
         instance = this
-        repository = TestLabRepository(this)
-        testRunnerEngine = TestRunnerEngine(this)
+        container = DefaultAppContainer(this)
     }
 
     companion object {

@@ -41,7 +41,8 @@ fun ElenchosTheme(
 
     if (!view.isInEditMode) {
         SideEffect {
-            val window = (view.context as Activity).window
+            val activity = view.context as? Activity ?: return@SideEffect
+            val window = activity.window
             window.statusBarColor = LabBackground.toArgb()
             window.navigationBarColor = LabSurface.toArgb()
             val insetsController = WindowCompat.getInsetsController(window, view)

@@ -126,23 +126,24 @@ class ElenchosLabAccessibilityService : AccessibilityService() {
         var onCrashOrAnrDetected: ((String) -> Unit)? = null
 
         fun isAccessibilityEnabled(context: Context): Boolean {
-            val serviceName = "${context.packageName}/${ElenchosLabAccessibilityService::class.java.name}"
-            val accessibilityEnabled = try {
-                Settings.Secure.getInt(
+            return try {
+                val serviceName = "${context.packageName}/${ElenchosLabAccessibilityService::class.java.name}"
+                val accessibilityEnabled = Settings.Secure.getInt(
                     context.contentResolver,
                     Settings.Secure.ACCESSIBILITY_ENABLED
                 )
+                if (accessibilityEnabled == 1) {
+                    val enabledServices = Settings.Secure.getString(
+                        context.contentResolver,
+                        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+                    ) ?: ""
+                    enabledServices.contains(serviceName)
+                } else {
+                    false
+                }
             } catch (_: Exception) {
-                0
+                false
             }
-            if (accessibilityEnabled == 1) {
-                val enabledServices = Settings.Secure.getString(
-                    context.contentResolver,
-                    Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-                ) ?: ""
-                return enabledServices.contains(serviceName)
-            }
-            return false
         }
 
         fun openAccessibilitySettings(context: Context) {

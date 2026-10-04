@@ -15,7 +15,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 
-class TestLabRepository(private val context: Context) {
+class TestLabRepository(private val context: Context) : ITestLabRepository {
 
     private val json = Json {
         prettyPrint = true
@@ -29,14 +29,14 @@ class TestLabRepository(private val context: Context) {
     private val sessionsDir = File(rootDir, "Sessions").apply { mkdirs() }
     private val exportsDir = File(rootDir, "Exports").apply { mkdirs() }
 
-    suspend fun saveApkArtifact(apk: APKArtifact) = withContext(Dispatchers.IO) {
+    override suspend fun saveApkArtifact(apk: APKArtifact): Unit = withContext(Dispatchers.IO) {
         mutex.withLock {
             val file = File(projectsDir, "${apk.id}.json")
             file.writeText(json.encodeToString(apk))
         }
     }
 
-    suspend fun getApkArtifacts(): List<APKArtifact> = withContext(Dispatchers.IO) {
+    override suspend fun getApkArtifacts(): List<APKArtifact> = withContext(Dispatchers.IO) {
         mutex.withLock {
             projectsDir.listFiles { _, name -> name.endsWith(".json") }
                 ?.mapNotNull { file ->
@@ -51,21 +51,21 @@ class TestLabRepository(private val context: Context) {
         }
     }
 
-    suspend fun deleteApkArtifact(id: String) = withContext(Dispatchers.IO) {
+    override suspend fun deleteApkArtifact(id: String): Unit = withContext(Dispatchers.IO) {
         mutex.withLock {
             val file = File(projectsDir, "$id.json")
             if (file.exists()) file.delete()
         }
     }
 
-    suspend fun saveTestSession(session: TestSession) = withContext(Dispatchers.IO) {
+    override suspend fun saveTestSession(session: TestSession): Unit = withContext(Dispatchers.IO) {
         mutex.withLock {
             val file = File(sessionsDir, "${session.id}.json")
             file.writeText(json.encodeToString(session))
         }
     }
 
-    suspend fun getTestSessions(): List<TestSession> = withContext(Dispatchers.IO) {
+    override suspend fun getTestSessions(): List<TestSession> = withContext(Dispatchers.IO) {
         mutex.withLock {
             sessionsDir.listFiles { _, name -> name.endsWith(".json") }
                 ?.mapNotNull { file ->
@@ -80,7 +80,7 @@ class TestLabRepository(private val context: Context) {
         }
     }
 
-    suspend fun getTestSession(id: String): TestSession? = withContext(Dispatchers.IO) {
+    override suspend fun getTestSession(id: String): TestSession? = withContext(Dispatchers.IO) {
         mutex.withLock {
             val file = File(sessionsDir, "$id.json")
             if (file.exists()) {
@@ -93,14 +93,14 @@ class TestLabRepository(private val context: Context) {
         }
     }
 
-    suspend fun deleteTestSession(id: String) = withContext(Dispatchers.IO) {
+    override suspend fun deleteTestSession(id: String): Unit = withContext(Dispatchers.IO) {
         mutex.withLock {
             val file = File(sessionsDir, "$id.json")
             if (file.exists()) file.delete()
         }
     }
 
-    suspend fun clearAllData() = withContext(Dispatchers.IO) {
+    override suspend fun clearAllData(): Unit = withContext(Dispatchers.IO) {
         mutex.withLock {
             rootDir.deleteRecursively()
             projectsDir.mkdirs()
@@ -109,7 +109,7 @@ class TestLabRepository(private val context: Context) {
         }
     }
 
-    suspend fun exportReport(session: TestSession, apk: APKArtifact, format: String): File = withContext(Dispatchers.IO) {
+    override suspend fun exportReport(session: TestSession, apk: APKArtifact, format: String): File = withContext(Dispatchers.IO) {
         mutex.withLock {
             val cleanPkg = apk.packageName.replace('.', '_')
             val file = when (format.lowercase()) {

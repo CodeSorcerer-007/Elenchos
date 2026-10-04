@@ -407,3 +407,25 @@ private fun ExpandableIssueCard(
         }
     }
 }
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+@Composable
+private fun ExpandableIssueCardPreview() {
+    val sampleIssue = Issue(
+        id = "SEC-001",
+        title = "Application debuggable flag enabled in production manifest",
+        severity = IssueSeverity.P0,
+        category = com.example.elenchos.domain.model.IssueCategory.SECURITY,
+        confidence = com.example.elenchos.domain.model.IssueConfidence.HIGH,
+        affectedScreen = "AndroidManifest.xml",
+        description = "android:debuggable is set to true, permitting JDWP debugger attachment and memory dumping.",
+        reproductionSteps = listOf("Extract APK manifest", "Verify android:debuggable attribute"),
+        expectedBehavior = "android:debuggable should be omitted or false in release builds",
+        actualBehavior = "android:debuggable=\"true\" found in manifest",
+        rootCauseHypothesis = "Release build variant config did not disable debuggable",
+        recommendedFix = "Set isMinifyEnabled = true and ensure debuggable is not forced true in release build type."
+    )
+    Box(modifier = Modifier.padding(16.dp)) {
+        ExpandableIssueCard(issue = sampleIssue, packageName = "com.sample.app", onCopyGitHub = {})
+    }
+}

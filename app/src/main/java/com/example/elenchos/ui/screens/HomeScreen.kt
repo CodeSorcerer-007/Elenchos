@@ -67,7 +67,7 @@ import com.example.elenchos.theme.LabTextTertiary
 import com.example.elenchos.ui.components.LabCard
 import com.example.elenchos.ui.components.StatusChip
 import com.example.elenchos.ui.viewmodel.ElenchosViewModel
-import com.example.elenchos.ui.viewmodel.NavigationScreen
+import com.example.elenchos.ui.navigation.NavigationScreen
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale

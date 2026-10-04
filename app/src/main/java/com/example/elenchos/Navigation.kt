@@ -1,5 +1,13 @@
 package com.example.elenchos
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -75,7 +83,7 @@ import com.example.elenchos.ui.screens.ReportsScreen
 import com.example.elenchos.ui.screens.SettingsScreen
 import com.example.elenchos.ui.screens.TestLabScreen
 import com.example.elenchos.ui.viewmodel.ElenchosViewModel
-import com.example.elenchos.ui.viewmodel.NavigationScreen
+import com.example.elenchos.ui.navigation.NavigationScreen
 
 @Composable
 fun MainNavigation(
@@ -123,15 +131,30 @@ fun MainNavigation(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            when (currentScreen) {
-                NavigationScreen.HOME -> HomeScreen(viewModel)
-                NavigationScreen.PROJECTS -> ProjectsScreen(viewModel)
-                NavigationScreen.TEST_LAB -> TestLabScreen(viewModel)
-                NavigationScreen.REPORTS -> ReportsScreen(viewModel)
-                NavigationScreen.ISSUES -> IssueExplorerScreen(viewModel)
-                NavigationScreen.AI_FIX -> AIFixPackageScreen(viewModel)
-                NavigationScreen.HISTORY -> HistoryScreen(viewModel)
-                NavigationScreen.SETTINGS -> SettingsScreen(viewModel)
+            AnimatedContent(
+                targetState = currentScreen,
+                transitionSpec = {
+                    val forward = targetState.ordinal >= initialState.ordinal
+                    if (forward) {
+                        (slideInHorizontally(animationSpec = tween(280, easing = FastOutSlowInEasing)) { width -> width / 4 } + fadeIn(animationSpec = tween(280)))
+                            .togetherWith(slideOutHorizontally(animationSpec = tween(280, easing = FastOutSlowInEasing)) { width -> -width / 4 } + fadeOut(animationSpec = tween(200)))
+                    } else {
+                        (slideInHorizontally(animationSpec = tween(280, easing = FastOutSlowInEasing)) { width -> -width / 4 } + fadeIn(animationSpec = tween(280)))
+                            .togetherWith(slideOutHorizontally(animationSpec = tween(280, easing = FastOutSlowInEasing)) { width -> width / 4 } + fadeOut(animationSpec = tween(200)))
+                    }
+                },
+                label = "ScreenTransition"
+            ) { targetScreen ->
+                when (targetScreen) {
+                    NavigationScreen.HOME -> HomeScreen(viewModel)
+                    NavigationScreen.PROJECTS -> ProjectsScreen(viewModel)
+                    NavigationScreen.TEST_LAB -> TestLabScreen(viewModel)
+                    NavigationScreen.REPORTS -> ReportsScreen(viewModel)
+                    NavigationScreen.ISSUES -> IssueExplorerScreen(viewModel)
+                    NavigationScreen.AI_FIX -> AIFixPackageScreen(viewModel)
+                    NavigationScreen.HISTORY -> HistoryScreen(viewModel)
+                    NavigationScreen.SETTINGS -> SettingsScreen(viewModel)
+                }
             }
         }
     }
@@ -311,4 +334,27 @@ private fun LabBottomNavigationBar(
             )
         }
     }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+@Composable
+private fun LabTopAppBarPreview() {
+    LabTopAppBar(
+        currentScreen = NavigationScreen.HOME,
+        selectedApkName = "SampleTargetApp.apk",
+        isRunning = true,
+        onHistoryClick = {},
+        onSettingsClick = {}
+    )
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+@Composable
+private fun LabBottomNavigationBarPreview() {
+    LabBottomNavigationBar(
+        currentScreen = NavigationScreen.HOME,
+        isRunning = false,
+        issuesCount = 3,
+        onNavigate = {}
+    )
 }

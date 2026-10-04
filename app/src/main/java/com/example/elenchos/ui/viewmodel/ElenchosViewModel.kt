@@ -27,24 +27,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.example.elenchos.data.storage.ITestLabRepository
+import com.example.elenchos.data.storage.TestLabRepository
+import com.example.elenchos.testing.runtime.ITestRunnerEngine
+import com.example.elenchos.testing.runtime.TestRunnerEngine
+import com.example.elenchos.ui.navigation.NavigationScreen
 import java.io.File
 import java.io.FileOutputStream
 
-enum class NavigationScreen(val label: String) {
-    HOME("Home"),
-    PROJECTS("Projects"),
-    TEST_LAB("Test Lab"),
-    REPORTS("Reports"),
-    ISSUES("Issues"),
-    AI_FIX("AI Fix Package"),
-    HISTORY("History"),
-    SETTINGS("Settings")
-}
-
-class ElenchosViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val repository = (application as ElenchosApplication).repository
-    private val testRunner = (application as ElenchosApplication).testRunnerEngine
+class ElenchosViewModel(
+    application: Application,
+    private val repository: ITestLabRepository = (application as? ElenchosApplication)?.repository ?: TestLabRepository(application),
+    private val testRunner: ITestRunnerEngine = (application as? ElenchosApplication)?.testRunnerEngine ?: TestRunnerEngine(application)
+) : AndroidViewModel(application) {
 
     private val _currentScreen = MutableStateFlow(NavigationScreen.HOME)
     val currentScreen: StateFlow<NavigationScreen> = _currentScreen.asStateFlow()
@@ -96,8 +91,12 @@ class ElenchosViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun checkAccessibilityStatus() {
-        val app = getApplication<Application>()
-        _isAccessibilityEnabled.value = ElenchosLabAccessibilityService.isAccessibilityEnabled(app)
+        try {
+            val app = getApplication<Application>()
+            _isAccessibilityEnabled.value = ElenchosLabAccessibilityService.isAccessibilityEnabled(app)
+        } catch (_: Exception) {
+            _isAccessibilityEnabled.value = false
+        }
     }
 
     fun refreshData() {

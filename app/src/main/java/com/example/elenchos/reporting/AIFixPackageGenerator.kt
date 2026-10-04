@@ -80,25 +80,32 @@ object AIFixPackageGenerator {
         return json.encodeToString(pkg)
     }
 
+    private fun sanitizePromptText(text: String?): String {
+        if (text == null) return ""
+        return text.replace("```", "'''")
+            .replace("==================================================", "--------------------------------------------------")
+            .trim()
+    }
+
     fun generateAIAgentHandoffPrompt(pkg: AIFixPackage): String {
         val issuesText = buildString {
             for ((idx, issue) in pkg.issues.withIndex()) {
-                appendLine("### ISSUE #${idx + 1}: [${issue.severity}] ${issue.title} (${issue.id})")
+                appendLine("### ISSUE #${idx + 1}: [${issue.severity}] ${sanitizePromptText(issue.title)} (${issue.id})")
                 appendLine("- **Category:** ${issue.category}")
                 appendLine("- **Confidence:** ${issue.confidence}")
-                appendLine("- **Affected Component/Screen:** ${issue.affectedScreen}")
-                appendLine("- **Expected Behavior:** ${issue.expectedBehavior}")
-                appendLine("- **Actual Behavior:** ${issue.actualBehavior}")
+                appendLine("- **Affected Component/Screen:** ${sanitizePromptText(issue.affectedScreen)}")
+                appendLine("- **Expected Behavior:** ${sanitizePromptText(issue.expectedBehavior)}")
+                appendLine("- **Actual Behavior:** ${sanitizePromptText(issue.actualBehavior)}")
                 appendLine("- **Reproduction Steps:**")
-                issue.reproductionSteps.forEach { appendLine("  $it") }
+                issue.reproductionSteps.forEach { appendLine("  - ${sanitizePromptText(it)}") }
                 if (!issue.stackTrace.isNullOrBlank()) {
                     appendLine("- **Stack Trace:**")
-                    appendLine("```")
-                    appendLine(issue.stackTrace.trim())
+                    appendLine("```text")
+                    appendLine(sanitizePromptText(issue.stackTrace))
                     appendLine("```")
                 }
-                appendLine("- **Probable Root Cause:** ${issue.rootCauseHypothesis}")
-                appendLine("- **Recommended Remediation:** ${issue.recommendedFix}")
+                appendLine("- **Probable Root Cause:** ${sanitizePromptText(issue.rootCauseHypothesis)}")
+                appendLine("- **Recommended Remediation:** ${sanitizePromptText(issue.recommendedFix)}")
                 appendLine()
             }
         }

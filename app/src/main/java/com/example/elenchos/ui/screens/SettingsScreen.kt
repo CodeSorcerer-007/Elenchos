@@ -281,3 +281,12 @@ private fun BudgetRow(label: String, value: String) {
         Text(text = value, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = LabTextPrimary)
     }
 }
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+@Composable
+private fun BudgetRowPreview() {
+    Column(modifier = Modifier.padding(16.dp)) {
+        BudgetRow("Maximum Test Duration", "5 minutes (300s)")
+        BudgetRow("Maximum UI Interactions", "200 actions")
+    }
+}
