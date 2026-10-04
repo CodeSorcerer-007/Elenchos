@@ -116,35 +116,42 @@ class InputFuzzingPhase : TestPhase {
 
         val testedFieldIds = mutableSetOf<String>()
 
-        for (v in vectors) {
-            context.log(TerminalLogEntry.LogLevel.TEST, "FUZZ", "Mutating vector [${v.category}]: ${v.description}")
-            if (rootNode != null) {
-                try {
-                    val focused = rootNode.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-                    if (focused != null && focused.isEditable) {
-                        val fieldKey = focused.viewIdResourceName ?: "focused_field"
-                        testedFieldIds.add(fieldKey)
-                        val element = DiscoveredUiElement(
-                            id = "fuzz_target",
-                            viewIdResourceName = focused.viewIdResourceName,
-                            className = focused.className?.toString() ?: "android.widget.EditText",
-                            text = focused.text?.toString(),
-                            contentDescription = focused.contentDescription?.toString(),
-                            isClickable = false,
-                            isEditable = true,
-                            isScrollable = false,
-                            bounds = Rect(),
-                            accessibilityNodeInfo = focused
-                        )
-                        if (ElenchosLabAccessibilityService.performInputText(element, v.value)) {
-                            context.realFuzzInjections++
+        try {
+            for (v in vectors) {
+                context.log(TerminalLogEntry.LogLevel.TEST, "FUZZ", "Mutating vector [${v.category}]: ${v.description}")
+                if (rootNode != null) {
+                    var focused: AccessibilityNodeInfo? = null
+                    try {
+                        focused = rootNode.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                        if (focused != null && focused.isEditable) {
+                            val fieldKey = focused.viewIdResourceName ?: "focused_field"
+                            testedFieldIds.add(fieldKey)
+                            val element = DiscoveredUiElement(
+                                id = "fuzz_target",
+                                viewIdResourceName = focused.viewIdResourceName,
+                                className = focused.className?.toString() ?: "android.widget.EditText",
+                                text = focused.text?.toString(),
+                                contentDescription = focused.contentDescription?.toString(),
+                                isClickable = false,
+                                isEditable = true,
+                                isScrollable = false,
+                                bounds = Rect(),
+                                accessibilityNodeInfo = focused
+                            )
+                            if (ElenchosLabAccessibilityService.performInputText(element, v.value)) {
+                                context.realFuzzInjections++
+                            }
                         }
+                    } catch (e: Exception) {
+                        android.util.Log.d("InputFuzzingPhase", "Focus lookup or text input bypassed: ${e.message}")
+                    } finally {
+                        ElenchosLabAccessibilityService.safeRecycle(focused)
                     }
-                } catch (e: Exception) {
-                    android.util.Log.d("InputFuzzingPhase", "Focus lookup or text input bypassed: ${e.message}")
                 }
+                delay(30)
             }
-            delay(30)
+        } finally {
+            ElenchosLabAccessibilityService.safeRecycle(rootNode)
         }
 
         context.actualInputFieldsTested = if (testedFieldIds.isNotEmpty()) {
@@ -183,7 +190,9 @@ class NavigationBackStackPhase : TestPhase {
             for (step in 1..maxBackActions) {
                 if (ElenchosLabAccessibilityService.performBackAction()) {
                     backTested++
-                    val activeActivity = ElenchosLabAccessibilityService.instance?.rootInActiveWindow?.className?.toString() ?: "Screen_$step"
+                    val activeRoot = ElenchosLabAccessibilityService.instance?.rootInActiveWindow
+                    val activeActivity = activeRoot?.className?.toString() ?: "Screen_$step"
+                    ElenchosLabAccessibilityService.safeRecycle(activeRoot)
                     screenHistory.add(activeActivity)
                     context.log(TerminalLogEntry.LogLevel.INFO, "NAV", "Executed live GLOBAL_ACTION_BACK ($step/$maxBackActions) -> $activeActivity")
                     delay(80)

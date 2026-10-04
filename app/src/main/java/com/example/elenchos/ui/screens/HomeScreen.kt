@@ -24,8 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CompareArrows
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Science
@@ -305,7 +304,7 @@ fun HomeScreen(
                 QuickActionItem(
                     label = "Compare Runs",
                     subtitle = "Regressions & Diffs",
-                    icon = Icons.Default.CompareArrows,
+                    icon = Icons.AutoMirrored.Filled.CompareArrows,
                     onClick = { viewModel.navigateTo(NavigationScreen.HISTORY) },
                     modifier = Modifier.weight(1f)
                 )

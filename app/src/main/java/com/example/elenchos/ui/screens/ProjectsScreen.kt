@@ -227,6 +227,20 @@ fun ProjectsScreen(
                                     onTestClick = { viewModel.startTestSession() },
                                     onInstallClick = {
                                         try {
+                                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
+                                                !context.packageManager.canRequestPackageInstalls()
+                                            ) {
+                                                viewModel.showToast("Please allow Elenchos to install target APKs")
+                                                val manageIntent = Intent(
+                                                    android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                                    Uri.parse("package:${context.packageName}")
+                                                ).apply {
+                                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                                }
+                                                context.startActivity(manageIntent)
+                                                return@ApkOverviewCard
+                                            }
+
                                             val file = File(apk.filePath)
                                             val uri = FileProvider.getUriForFile(
                                                 context,

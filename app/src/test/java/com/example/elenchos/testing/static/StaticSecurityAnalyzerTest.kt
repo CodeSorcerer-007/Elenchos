@@ -192,4 +192,54 @@ class StaticSecurityAnalyzerTest {
         assertEquals(IssueSeverity.P2, sdkIssue?.severity)
         assertEquals(IssueCategory.COMPATIBILITY, sdkIssue?.category)
     }
+
+    @Test
+    fun analyze_exportedContentProviderWithoutPermission_flagsP1Issue() {
+        val exportedProviders = listOf(
+            ComponentInfo("com.elenchos.testapp.UserDataProvider", isExported = true, permission = null)
+        )
+        val apk = createBaseApk().copy(providers = exportedProviders)
+        val issues = StaticSecurityAnalyzer.analyze(apk)
+        val prvIssue = issues.firstOrNull { it.id.startsWith("SEC-EXP-PRV") }
+        assertNotNull("Should detect exported ContentProvider without permission", prvIssue)
+        assertEquals(IssueSeverity.P1, prvIssue?.severity)
+        assertEquals(IssueCategory.SECURITY, prvIssue?.category)
+    }
+
+    @Test
+    fun analyze_onlyLauncherActivityExported_producesNoActivityIssues() {
+        val activities = listOf(
+            ComponentInfo(
+                "com.elenchos.testapp.MainActivity",
+                isExported = true,
+                intentActions = listOf("android.intent.action.MAIN", "android.intent.category.LAUNCHER")
+            )
+        )
+        val apk = createBaseApk().copy(activities = activities)
+        val issues = StaticSecurityAnalyzer.analyze(apk)
+        val actIssue = issues.firstOrNull { it.id.startsWith("SEC-EXP-ACT") }
+        assertTrue("Launcher activity alone should not trigger SEC-EXP-ACT", actIssue == null)
+    }
+
+    @Test
+    fun analyze_nonLauncherExportedActivity_flagsP1Issue() {
+        val activities = listOf(
+            ComponentInfo(
+                "com.elenchos.testapp.MainActivity",
+                isExported = true,
+                intentActions = listOf("android.intent.action.MAIN")
+            ),
+            ComponentInfo(
+                "com.elenchos.testapp.InternalDebugActivity",
+                isExported = true,
+                intentActions = emptyList(),
+                permission = null
+            )
+        )
+        val apk = createBaseApk().copy(activities = activities)
+        val issues = StaticSecurityAnalyzer.analyze(apk)
+        val actIssue = issues.firstOrNull { it.id.startsWith("SEC-EXP-ACT") }
+        assertNotNull("Non-launcher exported activity should trigger SEC-EXP-ACT", actIssue)
+        assertEquals(IssueSeverity.P1, actIssue?.severity)
+    }
 }

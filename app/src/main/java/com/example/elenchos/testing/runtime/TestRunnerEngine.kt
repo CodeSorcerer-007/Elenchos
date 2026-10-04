@@ -189,36 +189,13 @@ class TestRunnerEngine(
         )
 
         // Health score synthesis
-        val p4Count = issues.count { it.severity == IssueSeverity.P4 }
-        val stabilityScore = (100 - (p0Count * 40 + p1Count * 25 + p2Count * 10 + p3Count * 3)).coerceIn(0, 100)
-        val securityScore = (100 - (p0Count * 35 + p1Count * 20 + p2Count * 10 + p3Count * 5)).coerceIn(0, 100)
-        val functionalityPenalty = (executionContext.runtimeCrashesCount * 35) + (if (executionContext.launcherActivity == null) 25 else 0) + (p1Count * 10)
-        val functionalityScore = (100 - functionalityPenalty).coerceIn(0, 100)
-        val sizePenalty = if (apk.fileSizeBytes > 80 * 1024 * 1024) 20 else if (apk.fileSizeBytes > 40 * 1024 * 1024) 10 else 0
-        val latencyPenalty = if (executionContext.launchLatencyMs > 600) 20 else if (executionContext.launchLatencyMs > 400) 10 else 0
-        val performanceScore = (100 - (sizePenalty + latencyPenalty + (if (apk.dexCount > 3) 10 else 0))).coerceIn(0, 100)
-        val accessibilityPenalty = if (executionContext.realClicks == 0) 15 else 0
-        val accessibilityScore = (95 - accessibilityPenalty).coerceIn(0, 100)
-        val page16KbPenalty = if (!apk.is16KbPageAligned) 25 else 0
-        val targetSdkPenalty = if (apk.targetSdk < 34) 20 else if (apk.targetSdk < 35) 5 else 0
-        val abiPenalty = if (apk.nativeArchitectures.isNotEmpty() && !apk.nativeArchitectures.any { it.contains("64") }) 30 else 0
-        val compatibilityScore = (100 - (page16KbPenalty + targetSdkPenalty + abiPenalty)).coerceIn(0, 100)
-        val overallScore = ((stabilityScore * 0.25) +
-                (securityScore * 0.25) +
-                (functionalityScore * 0.20) +
-                (performanceScore * 0.10) +
-                (accessibilityScore * 0.10) +
-                (compatibilityScore * 0.10)).toInt().coerceIn(0, 100)
-
-        val healthScore = HealthScore(
-            overallScore = overallScore,
-            stabilityScore = stabilityScore,
-            functionalityScore = functionalityScore,
-            securityScore = securityScore,
-            performanceScore = performanceScore,
-            accessibilityScore = accessibilityScore,
-            compatibilityScore = compatibilityScore,
-            formulaExplanation = "Score = (Stability × 0.25) + (Security × 0.25) + (Functionality × 0.20) + (Performance × 0.10) + (Accessibility × 0.10) + (Compatibility × 0.10). Metrics derived from static manifest analysis, runtime crash monitors, latency checks, and accessibility trees."
+        val healthScore = HealthScore.calculate(
+            apk = apk,
+            issues = issues,
+            runtimeCrashesCount = executionContext.runtimeCrashesCount,
+            launcherActivity = executionContext.launcherActivity,
+            launchLatencyMs = executionContext.launchLatencyMs,
+            realClicks = executionContext.realClicks
         )
 
         val completedPhases = phaseProgressItems.map { it.copy(isCompleted = true, isCurrent = false) }

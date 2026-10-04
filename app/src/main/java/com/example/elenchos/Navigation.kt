@@ -104,6 +104,10 @@ fun MainNavigation(
         }
     }
 
+    androidx.activity.compose.BackHandler(enabled = currentScreen != NavigationScreen.HOME) {
+        viewModel.navigateTo(NavigationScreen.HOME)
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },

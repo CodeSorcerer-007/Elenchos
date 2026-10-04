@@ -165,7 +165,7 @@ fun IssueExplorerScreen(
                     onClick = { viewModel.setIssueSeverityFilter(null) }
                 )
             }
-            items(IssueSeverity.values()) { sev ->
+            items(IssueSeverity.entries) { sev ->
                 val count = allIssues.count { it.severity == sev }
                 FilterChip(
                     label = "${sev.code} ($count)",

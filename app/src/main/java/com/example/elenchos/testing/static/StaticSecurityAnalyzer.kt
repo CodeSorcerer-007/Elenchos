@@ -63,24 +63,26 @@ object StaticSecurityAnalyzer {
         }
 
         // 3. Insecure exported components without permissions
-        val exportedActivities = apk.activities.filter { it.isExported && it.permission == null }
-        if (exportedActivities.size > 2) {
+        val unprotectedActivities = apk.activities.filter {
+            it.isExported && it.permission == null && !it.intentActions.contains("android.intent.action.MAIN")
+        }
+        if (unprotectedActivities.isNotEmpty()) {
             issues.add(
                 Issue(
                     id = "SEC-EXP-ACT-${UUID.randomUUID().toString().take(6).uppercase()}",
                     severity = IssueSeverity.P1,
                     confidence = IssueConfidence.HIGH,
                     category = IssueCategory.SECURITY,
-                    title = "${exportedActivities.size} Activities exported without permission protection",
-                    description = "Multiple Activity components are exported (`android:exported=\"true\"`) without requiring calling permissions. Any third-party application on the device can launch these internal screens directly, bypassing authentication or onboarding gates.",
-                    affectedScreen = exportedActivities.firstOrNull()?.name ?: "Activities",
+                    title = "${unprotectedActivities.size} Activity component(s) exported without permission protection",
+                    description = "Internal Activity component(s) are exported (`android:exported=\"true\"`) without requiring calling permissions. Any third-party application on the device can launch these internal screens directly, bypassing authentication or onboarding gates.",
+                    affectedScreen = unprotectedActivities.first().name,
                     reproductionSteps = listOf(
-                        "1. Run `adb shell am start -n ${apk.packageName}/${exportedActivities.firstOrNull()?.name}`.",
-                        "2. Observe that the activity opens without authentication verification.",
+                        "1. Run `adb shell am start -n ${apk.packageName}/${unprotectedActivities.first().name}`.",
+                        "2. Observe that the internal activity opens without authentication verification.",
                         "3. Sensitive workflows may be invoked externally."
                     ),
                     expectedBehavior = "Only main launcher or explicitly intended deep-link activities should be exported. Internal screens should set android:exported=\"false\".",
-                    actualBehavior = "${exportedActivities.size} activities are publicly accessible: ${exportedActivities.take(3).joinToString { it.name.substringAfterLast('.') }}...",
+                    actualBehavior = "${unprotectedActivities.size} activities are publicly accessible: ${unprotectedActivities.take(3).joinToString { it.name.substringAfterLast('.') }}...",
                     rootCauseHypothesis = "Activities declaring <intent-filter> require explicit android:exported on Android 12+, and developers frequently set exported='true' indiscriminately.",
                     hypothesisConfidence = IssueConfidence.HIGH,
                     recommendedFix = "Set `android:exported=\"false\"` for internal screens. If an activity must be opened by other apps, protect it with a custom signature-level permission."
@@ -134,6 +136,31 @@ object StaticSecurityAnalyzer {
                     rootCauseHypothesis = "BroadcastReceiver declared with intent-filter without explicitly disabling exported status.",
                     hypothesisConfidence = IssueConfidence.HIGH,
                     recommendedFix = "Set `android:exported=\"false\"` or use LocalBroadcastManager / Flow events for internal app messaging."
+                )
+            )
+        }
+
+        val exportedProviders = apk.providers.filter { it.isExported && it.permission == null }
+        if (exportedProviders.isNotEmpty()) {
+            issues.add(
+                Issue(
+                    id = "SEC-EXP-PRV-${UUID.randomUUID().toString().take(6).uppercase()}",
+                    severity = IssueSeverity.P1,
+                    confidence = IssueConfidence.HIGH,
+                    category = IssueCategory.SECURITY,
+                    title = "Exported ContentProvider without permission guard: ${exportedProviders.first().name.substringAfterLast('.')}",
+                    description = "The ContentProvider is exported (`android:exported=\"true\"`) without requiring read/write permissions. Any application on the device can query, extract, modify, or inject data into internal storage or SQLite databases.",
+                    affectedScreen = exportedProviders.first().name,
+                    reproductionSteps = listOf(
+                        "1. Query package providers via PackageManager.",
+                        "2. Identify exported ContentProvider ${exportedProviders.first().name}.",
+                        "3. Issue content query or insert from an untrusted third-party app without permission."
+                    ),
+                    expectedBehavior = "ContentProviders should set android:exported=\"false\" unless intended for cross-app IPC, in which case readPermission/writePermission must be required.",
+                    actualBehavior = "ContentProvider is exported without permission requirements.",
+                    rootCauseHypothesis = "ContentProvider declared with exported='true' or legacy default without specifying protecting permissions.",
+                    hypothesisConfidence = IssueConfidence.HIGH,
+                    recommendedFix = "Set `android:exported=\"false\"` on the `<provider>` declaration, or guard it with `android:readPermission` and `android:writePermission`."
                 )
             )
         }

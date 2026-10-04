@@ -196,7 +196,59 @@ data class HealthScore(
     val accessibilityScore: Int,
     val compatibilityScore: Int,
     val formulaExplanation: String
-)
+) {
+    companion object {
+        fun calculate(
+            apk: APKArtifact,
+            issues: List<Issue>,
+            runtimeCrashesCount: Int = 0,
+            launcherActivity: ComponentInfo? = null,
+            launchLatencyMs: Long = 180L,
+            realClicks: Int = 1
+        ): HealthScore {
+            val p0Count = issues.count { it.severity == IssueSeverity.P0 }
+            val p1Count = issues.count { it.severity == IssueSeverity.P1 }
+            val p2Count = issues.count { it.severity == IssueSeverity.P2 }
+            val p3Count = issues.count { it.severity == IssueSeverity.P3 }
+
+            val stabilityScore = (100 - (p0Count * 40 + p1Count * 25 + p2Count * 10 + p3Count * 3)).coerceIn(0, 100)
+            val securityScore = (100 - (p0Count * 35 + p1Count * 20 + p2Count * 10 + p3Count * 5)).coerceIn(0, 100)
+
+            val functionalityPenalty = (runtimeCrashesCount * 35) + (if (launcherActivity == null) 25 else 0) + (p1Count * 10)
+            val functionalityScore = (100 - functionalityPenalty).coerceIn(0, 100)
+
+            val sizePenalty = if (apk.fileSizeBytes > 80 * 1024 * 1024) 20 else if (apk.fileSizeBytes > 40 * 1024 * 1024) 10 else 0
+            val latencyPenalty = if (launchLatencyMs > 600) 20 else if (launchLatencyMs > 400) 10 else 0
+            val performanceScore = (100 - (sizePenalty + latencyPenalty + (if (apk.dexCount > 3) 10 else 0))).coerceIn(0, 100)
+
+            val accessibilityPenalty = if (realClicks == 0) 15 else 0
+            val accessibilityScore = (95 - accessibilityPenalty).coerceIn(0, 100)
+
+            val page16KbPenalty = if (!apk.is16KbPageAligned) 25 else 0
+            val targetSdkPenalty = if (apk.targetSdk < 34) 20 else if (apk.targetSdk < 35) 5 else 0
+            val abiPenalty = if (apk.nativeArchitectures.isNotEmpty() && !apk.nativeArchitectures.any { it.contains("64") }) 30 else 0
+            val compatibilityScore = (100 - (page16KbPenalty + targetSdkPenalty + abiPenalty)).coerceIn(0, 100)
+
+            val overallScore = ((stabilityScore * 0.25) +
+                    (securityScore * 0.25) +
+                    (functionalityScore * 0.20) +
+                    (performanceScore * 0.10) +
+                    (accessibilityScore * 0.10) +
+                    (compatibilityScore * 0.10)).toInt().coerceIn(0, 100)
+
+            return HealthScore(
+                overallScore = overallScore,
+                stabilityScore = stabilityScore,
+                functionalityScore = functionalityScore,
+                securityScore = securityScore,
+                performanceScore = performanceScore,
+                accessibilityScore = accessibilityScore,
+                compatibilityScore = compatibilityScore,
+                formulaExplanation = "Score = (Stability × 0.25) + (Security × 0.25) + (Functionality × 0.20) + (Performance × 0.10) + (Accessibility × 0.10) + (Compatibility × 0.10). Metrics derived from static manifest analysis, runtime crash monitors, latency checks, and accessibility trees."
+            )
+        }
+    }
+}
 
 @Serializable
 data class TestCoverage(

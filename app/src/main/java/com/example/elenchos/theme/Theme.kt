@@ -43,8 +43,12 @@ fun ElenchosTheme(
         SideEffect {
             val activity = view.context as? Activity ?: return@SideEffect
             val window = activity.window
-            window.statusBarColor = LabBackground.toArgb()
-            window.navigationBarColor = LabSurface.toArgb()
+            if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                @Suppress("DEPRECATION")
+                window.statusBarColor = LabBackground.toArgb()
+                @Suppress("DEPRECATION")
+                window.navigationBarColor = LabSurface.toArgb()
+            }
             val insetsController = WindowCompat.getInsetsController(window, view)
             insetsController.isAppearanceLightStatusBars = true
             insetsController.isAppearanceLightNavigationBars = true
