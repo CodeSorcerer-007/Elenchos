@@ -123,6 +123,47 @@ class TestRunnerEngineModularTest {
     }
 
     @Test
+    fun engine_abortTest_methodInvoked_cancelsExecutionDirectly() = runTest {
+        var engineRef: TestRunnerEngine? = null
+        val engine = TestRunnerEngine(
+            context = android.app.Application(),
+            phasesList = listOf(
+                object : TestPhase {
+                    override val name: String = "Phase 1"
+                    override suspend fun execute(context: PhaseExecutionContext): PhaseExecutionResult {
+                        engineRef?.abortTest()
+                        return PhaseExecutionResult(success = true)
+                    }
+                },
+                object : TestPhase {
+                    override val name: String = "Phase 2"
+                    override suspend fun execute(context: PhaseExecutionContext): PhaseExecutionResult {
+                        return PhaseExecutionResult(success = true)
+                    }
+                }
+            )
+        )
+        engineRef = engine
+
+        val apk = APKArtifact(
+            id = "test-apk-id",
+            filePath = "/fake/path/app.apk",
+            sha256 = "test-sha256",
+            fileSizeBytes = 1024,
+            formattedSize = "1.0 KB",
+            appName = "Test App",
+            packageName = "com.test.app",
+            versionName = "1.0",
+            versionCode = 1,
+            minSdk = 24,
+            targetSdk = 35
+        )
+
+        val session = engine.executeTestSession(apk, TestConfiguration()) { _, _, _ -> }
+        assertEquals(TestStatus.CANCELLED, session.status)
+    }
+
+    @Test
     fun issueCorrelationPhase_deduplicatesIdenticalIssues() = runTest {
         val issue1 = com.example.elenchos.domain.model.Issue(
             id = "ISSUE-1",

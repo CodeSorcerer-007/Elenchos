@@ -84,4 +84,142 @@ class ApkParserTest {
         val result = ApkParser.parseAxmlCleartextTraffic(invalidBytes)
         org.junit.Assert.assertNull("Invalid AXML header should return null", result)
     }
+
+    private fun writeIntLE(bos: java.io.ByteArrayOutputStream, v: Int) {
+        bos.write(v and 0xFF)
+        bos.write((v shr 8) and 0xFF)
+        bos.write((v shr 16) and 0xFF)
+        bos.write((v shr 24) and 0xFF)
+    }
+
+    private fun writeShortLE(bos: java.io.ByteArrayOutputStream, v: Int) {
+        bos.write(v and 0xFF)
+        bos.write((v shr 8) and 0xFF)
+    }
+
+    private fun buildAxmlWithCleartext(isUtf8: Boolean, cleartextEnabled: Boolean, includeCleartextString: Boolean = true): ByteArray {
+        val stringPoolData = java.io.ByteArrayOutputStream()
+        val strings = if (includeCleartextString) {
+            listOf("application", "usesCleartextTraffic")
+        } else {
+            listOf("application", "someOtherAttribute")
+        }
+
+        val offsets = mutableListOf<Int>()
+        for (str in strings) {
+            offsets.add(stringPoolData.size())
+            if (isUtf8) {
+                val bytes = str.toByteArray(Charsets.UTF_8)
+                stringPoolData.write(bytes.size)
+                stringPoolData.write(bytes.size)
+                stringPoolData.write(bytes)
+                stringPoolData.write(0)
+            } else {
+                writeShortLE(stringPoolData, str.length)
+                for (ch in str) {
+                    writeShortLE(stringPoolData, ch.code)
+                }
+                writeShortLE(stringPoolData, 0)
+            }
+        }
+
+        val stringCount = strings.size
+        val offsetsBytesSize = stringCount * 4
+        val stringsStartOffset = 28 + offsetsBytesSize
+        val stringChunkSize = stringsStartOffset + stringPoolData.size()
+
+        val stringChunk = java.io.ByteArrayOutputStream()
+        writeIntLE(stringChunk, 0x001C0001) // String pool type
+        writeIntLE(stringChunk, stringChunkSize)
+        writeIntLE(stringChunk, stringCount)
+        writeIntLE(stringChunk, 0) // style count
+        writeIntLE(stringChunk, if (isUtf8) (1 shl 8) else 0) // flags
+        writeIntLE(stringChunk, stringsStartOffset)
+        writeIntLE(stringChunk, 0) // stylesStart
+        for (off in offsets) {
+            writeIntLE(stringChunk, off)
+        }
+        stringChunk.write(stringPoolData.toByteArray())
+
+        // Build Start Element with attribute
+        val elementChunk = java.io.ByteArrayOutputStream()
+        writeIntLE(elementChunk, 0x00100102) // START_ELEMENT
+        val attrSize = 20
+        val attrCount = 1
+        val elementHeaderSize = 36
+        val totalElementChunkSize = elementHeaderSize + (attrCount * attrSize)
+        writeIntLE(elementChunk, totalElementChunkSize)
+        writeIntLE(elementChunk, 1) // line
+        writeIntLE(elementChunk, -1) // comment
+        writeIntLE(elementChunk, -1) // ns
+        writeIntLE(elementChunk, 0) // name = "application"
+        writeShortLE(elementChunk, elementHeaderSize) // attrStart
+        writeShortLE(elementChunk, attrSize) // attrSize
+        writeShortLE(elementChunk, attrCount) // attrCount
+        writeShortLE(elementChunk, 0) // idIndex
+        writeShortLE(elementChunk, 0) // classIndex
+        writeShortLE(elementChunk, 0) // styleIndex
+
+        // Attribute: ns(-1), name(index 1 = "usesCleartextTraffic"), rawVal(-1), size(8), res(0), type(3), data(1 or 0)
+        writeIntLE(elementChunk, -1) // ns
+        writeIntLE(elementChunk, 1) // name index
+        writeIntLE(elementChunk, -1) // rawValue
+        writeShortLE(elementChunk, 8) // size
+        elementChunk.write(0) // res0
+        elementChunk.write(3) // type
+        writeIntLE(elementChunk, if (cleartextEnabled) 1 else 0) // typedValData
+
+        // Assemble root AXML
+        val axml = java.io.ByteArrayOutputStream()
+        val totalFileSize = 8 + stringChunk.size() + elementChunk.size()
+        writeIntLE(axml, 0x00080003) // AXML magic
+        writeIntLE(axml, totalFileSize)
+        axml.write(stringChunk.toByteArray())
+        axml.write(elementChunk.toByteArray())
+
+        return axml.toByteArray()
+    }
+
+    @Test
+    fun parseAxmlCleartextTraffic_detectsUtf8CleartextTrue() {
+        val bytes = buildAxmlWithCleartext(isUtf8 = true, cleartextEnabled = true)
+        val result = ApkParser.parseAxmlCleartextTraffic(bytes)
+        org.junit.Assert.assertEquals(true, result)
+    }
+
+    @Test
+    fun parseAxmlCleartextTraffic_detectsUtf8CleartextFalse() {
+        val bytes = buildAxmlWithCleartext(isUtf8 = true, cleartextEnabled = false)
+        val result = ApkParser.parseAxmlCleartextTraffic(bytes)
+        org.junit.Assert.assertEquals(false, result)
+    }
+
+    @Test
+    fun parseAxmlCleartextTraffic_detectsUtf16CleartextTrue() {
+        val bytes = buildAxmlWithCleartext(isUtf8 = false, cleartextEnabled = true)
+        val result = ApkParser.parseAxmlCleartextTraffic(bytes)
+        org.junit.Assert.assertEquals(true, result)
+    }
+
+    @Test
+    fun parseAxmlCleartextTraffic_detectsUtf16CleartextFalse() {
+        val bytes = buildAxmlWithCleartext(isUtf8 = false, cleartextEnabled = false)
+        val result = ApkParser.parseAxmlCleartextTraffic(bytes)
+        org.junit.Assert.assertEquals(false, result)
+    }
+
+    @Test
+    fun parseAxmlCleartextTraffic_returnsNullWhenAttributeMissing() {
+        val bytes = buildAxmlWithCleartext(isUtf8 = true, cleartextEnabled = true, includeCleartextString = false)
+        val result = ApkParser.parseAxmlCleartextTraffic(bytes)
+        org.junit.Assert.assertNull(result)
+    }
+
+    @Test
+    fun parseAxmlCleartextTraffic_handlesMalformedTruncatedSafely() {
+        val bytes = buildAxmlWithCleartext(isUtf8 = true, cleartextEnabled = true)
+        val truncated = bytes.copyOf(bytes.size / 2)
+        val result = ApkParser.parseAxmlCleartextTraffic(truncated)
+        org.junit.Assert.assertNull(result)
+    }
 }

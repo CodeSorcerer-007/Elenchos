@@ -140,6 +140,27 @@ fun ReportsScreen(
                         )
                     }
 
+                    val isLiveMode = s.terminalLogs.any { it.message.contains("Accessibility Service ACTIVE") }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp)
+                            .background(
+                                if (isLiveMode) Color(0xFFECFDF5) else Color(0xFFF1F5F9),
+                                RoundedCornerShape(6.dp)
+                            )
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isLiveMode) "⚡ EXECUTION: LIVE ON-DEVICE UI EXPLORATION" else "🔬 EXECUTION: DETERMINISTIC SANDBOX & MANIFEST AUDIT",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp,
+                            color = if (isLiveMode) Color(0xFF065F46) else Color(0xFF334155)
+                        )
+                    }
+
                     Spacer(modifier = Modifier.height(14.dp))
 
                     Text(

@@ -116,12 +116,7 @@ object ApkParser {
         val usesCleartextTraffic = if (manifestExplicitCleartext != null) {
             manifestExplicitCleartext
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (targetSdk < 28) {
-                // Prior to Android 9 (API 28), cleartext was allowed by default
-                (appInfo.flags and ApplicationInfo.FLAG_USES_CLEARTEXT_TRAFFIC) != 0 || true
-            } else {
-                (appInfo.flags and ApplicationInfo.FLAG_USES_CLEARTEXT_TRAFFIC) != 0
-            }
+            (appInfo.flags and ApplicationInfo.FLAG_USES_CLEARTEXT_TRAFFIC) != 0
         } else {
             targetSdk < 28
         }
@@ -485,9 +480,15 @@ object ApkParser {
             if (chunkSize <= 0 || offset + chunkSize > bytes.size) break
 
             if (chunkType == 0x00100102) { // START_ELEMENT
-                val attrStart = getShortLittleEndian(bytes, offset + 20)
-                val attrSize = getShortLittleEndian(bytes, offset + 22)
-                val attrCount = getShortLittleEndian(bytes, offset + 24)
+                var attrStart = getShortLittleEndian(bytes, offset + 24)
+                var attrSize = getShortLittleEndian(bytes, offset + 26)
+                var attrCount = getShortLittleEndian(bytes, offset + 28)
+
+                if (attrStart <= 0 || attrStart > chunkSize || attrSize <= 0) {
+                    attrStart = getShortLittleEndian(bytes, offset + 20)
+                    attrSize = getShortLittleEndian(bytes, offset + 22)
+                    attrCount = getShortLittleEndian(bytes, offset + 24)
+                }
 
                 var attrOffset = offset + attrStart
                 for (a in 0 until attrCount) {

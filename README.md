@@ -114,11 +114,22 @@ com.example.elenchos/
 - JDK 17 or JDK 21 (`JAVA_HOME` configured)
 - Android SDK Platform 36 & Build-Tools 35.0.0+
 
-### Assemble Debug APK
+### Direct Install (Pre-built Release APK)
 ```bash
-./gradlew assembleDebug
+adb install -r elenchos-v1.0-release.apk
 ```
-Output artifact: `app/build/outputs/apk/debug/app-debug.apk`
+
+### Assemble From Source
+```bash
+# Debug Build
+./gradlew assembleDebug
+
+# Production Release Build (R8 Minified & Resource Shrunk)
+./gradlew assembleRelease
+```
+Output artifacts:
+- Pre-built Release: `elenchos-v1.0-release.apk`
+- Debug: `app/build/outputs/apk/debug/app-debug.apk`
 
 ### Install on Device / Emulator
 ```bash

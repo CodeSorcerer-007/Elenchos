@@ -122,7 +122,12 @@ class StartupLatencyPhase : TestPhase {
         }
         context.launchLatencyMs = launchLatency
         delay(80)
-        return PhaseExecutionResult(success = true, details = "Startup footprint: ${launchLatency}ms")
+        val detailsStr = if (apk.isInstalledOnDevice) {
+            "Measured cold start: ${launchLatency}ms"
+        } else {
+            "Computed static footprint: ${launchLatency}ms"
+        }
+        return PhaseExecutionResult(success = true, details = detailsStr)
     }
 }
 
