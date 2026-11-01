@@ -1,0 +1,17 @@
+🔬 Introducing Elenchos (ἔλεγχος) — God-Tier Autonomous Android Mobile QA Laboratory.
+
+Stop manually monkey-testing your Android APKs. 
+Elenchos runs directly on physical Android devices and emulators:
+⚡ Deep APK binary ingestion & DEX string pool credential extraction
+⚡ Real ELF PT_LOAD 16KB Page Alignment audit for Android 15/16
+⚡ Autonomous live UI window crawling & boundary fuzzing via AccessibilityService
+⚡ Real-time logcat crash harvesting & occurrence deduplication
+⚡ Objective mathematical Health Scoring (0–100)
+⚡ Instant 1-Click AI Fix Package handoff for Claude, GPT-4o, and Gemini
+
+100% Offline. Zero Cloud Exfiltration. 14 Diagnostic Phases.
+
+Try the v1.0 release:
+adb install -r elenchos-v1.0-release.apk
+
+GitHub: https://github.com/CodeSorcerer-007/Elenchos

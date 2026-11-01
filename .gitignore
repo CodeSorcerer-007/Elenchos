@@ -15,3 +15,5 @@ window_dump.txt
 screenshot*.png
 sc_*.png
 device_screenshot.png
+__pycache__/
+*.pyc
